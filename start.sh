@@ -2,31 +2,16 @@
 
 echo "🚀 Bitcoin Auto-Trading System 시작"
 
-# 환경 변수 파일 확인
-if [ ! -f backend/.env ]; then
-    echo "⚠️  backend/.env 파일이 없습니다. .env.example을 복사해서 설정하세요."
-    cp backend/.env.example backend/.env
-fi
+# 개발 서버 실행만 수행 (사전 의존성 설치와 환경 설정은 setup.sh 사용)
 
-if [ ! -f frontend/.env.local ]; then
-    echo "⚠️  frontend/.env.local 파일이 없습니다. .env.example을 복사해서 설정하세요."
-    cp frontend/.env.example frontend/.env.local
-fi
-
-# 백엔드 의존성 설치 및 실행
-echo "📦 백엔드 의존성 설치 중..."
-pip install -r requirements.txt
+# 백엔드 실행
 cd backend
-
 echo "🔧 백엔드 서버 시작 중..."
 uvicorn main:app --host 0.0.0.0 --port 8000 --reload &
 BACKEND_PID=$!
 
-# 프론트엔드 의존성 설치 및 실행
-echo "📦 프론트엔드 의존성 설치 중..."
+# 프론트엔드 실행
 cd ../frontend
-npm install
-
 echo "🎨 프론트엔드 서버 시작 중..."
 npm run dev &
 FRONTEND_PID=$!

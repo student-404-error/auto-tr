@@ -7,11 +7,11 @@
 - Environment: copy `backend/.env.example -> backend/.env` and `frontend/.env.example -> frontend/.env.local` (do not commit secrets).
 
 ## Build, Test, and Development Commands
-- Local (both services): `bash start.sh` — installs deps and runs API on `:8000` and web on `:3000`.
-- Docker (recommended parity): `docker-compose up --build` — builds and runs frontend + backend.
+- One-time setup: `bash setup.sh` — prepares env files (if examples exist) and installs backend/frontend dependencies.
+- Run locally: `bash start.sh` — starts API on `:8000` and web on `:3000`.
+- Docker: `docker-compose up --build` — builds and runs frontend + backend.
 - Backend only: `pip install -r requirements.txt && (cd backend && uvicorn main:app --reload)`.
-- Frontend only: `(cd frontend && npm install && npm run dev)`.
-- Lint (web): `(cd frontend && npm run lint)`.
+- Frontend only: `(cd frontend && npm run dev)`; lint via `(cd frontend && npm run lint)`.
 
 ## Coding Style & Naming Conventions
 - Python: PEP 8, 4-space indent, type hints. Files/modules `snake_case.py`; classes `PascalCase`; functions/vars `snake_case`.
@@ -31,4 +31,3 @@
 - Env vars: `BYBIT_API_KEY`, `BYBIT_API_SECRET`, `BYBIT_TESTNET` (backend); `NEXT_PUBLIC_API_URL` (frontend). Never commit keys.
 - CORS: backend allows `http://localhost:3000` by default; update if deploying elsewhere.
 - Secrets in CI/CD: use environment providers, not files; verify logs don’t print credentials.
-
