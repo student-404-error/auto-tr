@@ -1,0 +1,44 @@
+/* Tailwind CSS directives */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-dark-bg text-white;
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-dark-card rounded-lg p-6 shadow-lg border border-gray-700;
+  }
+
+  .btn-primary {
+    @apply bg-crypto-blue hover:bg-crypto-blue/80 text-white px-4 py-2 rounded-lg transition-colors;
+  }
+
+  .btn-success {
+    @apply bg-crypto-green hover:bg-crypto-green/80 text-white px-4 py-2 rounded-lg transition-colors;
+  }
+
+  .btn-danger {
+    @apply bg-crypto-red hover:bg-crypto-red/80 text-white px-4 py-2 rounded-lg transition-colors;
+  }
+
+  .price-up {
+    @apply text-crypto-green;
+  }
+
+  .price-down {
+    @apply text-crypto-red;
+  }
+
+  .loading-spinner {
+    @apply animate-spin rounded-full h-8 w-8 border-b-2 border-crypto-blue;
+  }
+}
