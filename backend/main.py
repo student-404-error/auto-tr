@@ -8,7 +8,7 @@ from typing import Dict, Any
 
 from api.routes import router
 from trading.bybit_client import BybitClient
-from trading.simple_strategy import SimpleStrategy
+from trading.simple_strategy import TradingStrategy
 
 app = FastAPI(title="Bitcoin Auto-Trading API", version="1.0.0")
 
