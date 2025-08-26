@@ -23,7 +23,7 @@ interface TradingContextType {
   currentPrice: number | null
   isLoading: boolean
   error: string | null
-  
+
   fetchPortfolio: () => Promise<void>
   fetchTradingStatus: () => Promise<void>
   fetchCurrentPrice: () => Promise<void>

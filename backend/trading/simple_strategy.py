@@ -54,41 +54,29 @@ class TradingStrategy:
             self.last_signal = signal
     
     async def analyze_market(self, kline_data: list) -> Optional[str]:
-        """시장 분석 및 신호 생성"""
+        """간단한 가격 기반 분석"""
         try:
-            # 데이터 프레임 생성
-            df = pd.DataFrame(kline_data, columns=[
-                'timestamp', 'open', 'high', 'low', 'close', 'volume', 'turnover'
-            ])
+            if len(kline_data) < 5:
+                return None
             
-            # 데이터 타입 변환
-            df['close'] = df['close'].astype(float)
-            df['high'] = df['high'].astype(float)
-            df['low'] = df['low'].astype(float)
-            df['volume'] = df['volume'].astype(float)
+            # 최근 5개 캔들의 종가 추출
+            recent_prices = []
+            for kline in kline_data[-5:]:
+                close_price = float(kline[4])  # close price
+                recent_prices.append(close_price)
             
-            # 기술적 지표 계산
-            df['rsi'] = ta.momentum.RSIIndicator(df['close'], window=self.rsi_period).rsi()
-            df['ma_short'] = ta.trend.SMAIndicator(df['close'], window=self.ma_short).sma_indicator()
-            df['ma_long'] = ta.trend.SMAIndicator(df['close'], window=self.ma_long).sma_indicator()
+            current_price = recent_prices[-1]
+            avg_price = sum(recent_prices) / len(recent_prices)
             
-            # 최신 값들
-            current_rsi = df['rsi'].iloc[-1]
-            current_ma_short = df['ma_short'].iloc[-1]
-            current_ma_long = df['ma_long'].iloc[-1]
-            current_price = df['close'].iloc[-1]
+            print(f"📈 현재 가격: ${current_price:.2f}, 평균: ${avg_price:.2f}")
             
-            print(f"📈 현재 가격: ${current_price:.2f}, RSI: {current_rsi:.2f}")
-            
-            # 매수 신호: RSI < 30 and 단기MA > 장기MA
-            if (current_rsi < self.rsi_oversold and 
-                current_ma_short > current_ma_long and 
-                self.position != 'long'):
+            # 간단한 매매 신호
+            # 매수 신호: 현재가가 평균보다 2% 이상 낮을 때
+            if current_price < avg_price * 0.98 and self.position != 'long':
                 return 'buy'
             
-            # 매도 신호: RSI > 70 or 단기MA < 장기MA
-            elif ((current_rsi > self.rsi_overbought or current_ma_short < current_ma_long) and 
-                  self.position == 'long'):
+            # 매도 신호: 현재가가 평균보다 2% 이상 높을 때
+            elif current_price > avg_price * 1.02 and self.position == 'long':
                 return 'sell'
             
             return None

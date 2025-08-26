@@ -8,6 +8,9 @@ import TradingControls from './TradingControls'
 import PriceChart from './PriceChart'
 import TradeHistory from './TradeHistory'
 import StatusIndicator from './StatusIndicator'
+import PerformanceChart from './PerformanceChart'
+import TradingSignals from './TradingSignals'
+import PositionCard from './PositionCard'
 
 export default function Dashboard() {
   const { 
@@ -73,10 +76,15 @@ export default function Dashboard() {
         </div>
 
         {/* 메인 그리드 */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-8">
           {/* 포트폴리오 카드 */}
           <div className="lg:col-span-1">
             <PortfolioCard portfolio={portfolio} />
+          </div>
+          
+          {/* 현재 포지션 */}
+          <div className="lg:col-span-1">
+            <PositionCard />
           </div>
           
           {/* 트레이딩 컨트롤 */}
@@ -84,15 +92,19 @@ export default function Dashboard() {
             <TradingControls />
           </div>
           
-          {/* 현재 가격 */}
+          {/* 실시간 신호 */}
           <div className="lg:col-span-1">
             <div className="card">
-              <h3 className="text-lg font-semibold mb-4">현재 BTC 가격</h3>
-              <div className="text-3xl font-bold text-crypto-green">
-                ${currentPrice?.toLocaleString() || '0'}
-              </div>
-              <p className="text-gray-400 text-sm mt-2">USDT</p>
+              <TradingSignals />
             </div>
+          </div>
+        </div>
+
+        {/* 성과 차트 */}
+        <div className="mb-8">
+          <div className="card">
+            <h3 className="text-lg font-semibold mb-4">포트폴리오 성과</h3>
+            <PerformanceChart />
           </div>
         </div>
 

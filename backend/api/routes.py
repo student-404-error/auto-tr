@@ -1,7 +1,13 @@
 from fastapi import APIRouter, HTTPException, Request
 import asyncio
+from models.portfolio_history import PortfolioHistory
+from models.trade_tracker import TradeTracker
 
 router = APIRouter()
+
+# 글로벌 인스턴스
+portfolio_history = PortfolioHistory()
+trade_tracker = TradeTracker()
 
 
 def get_trading_client(request: Request):
@@ -34,12 +40,25 @@ async def get_portfolio(request: Request):
             elif coin == "USDT":
                 total_usd += data["balance"]
 
-        return {
+        portfolio_data = {
             "balances": balance,
             "current_btc_price": current_price,
             "total_value_usd": total_usd,
             "timestamp": asyncio.get_event_loop().time(),
         }
+        
+        # 포트폴리오 히스토리에 스냅샷 추가
+        portfolio_history.add_snapshot(portfolio_data)
+        
+        # 수익률 통계 추가
+        performance_stats = portfolio_history.get_performance_stats()
+        portfolio_data.update(performance_stats)
+        
+        # BTC 포지션 정보 추가
+        btc_pnl = trade_tracker.get_pnl("BTCUSDT", current_price)
+        portfolio_data["btc_position"] = btc_pnl
+        
+        return portfolio_data
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -140,3 +159,55 @@ async def place_manual_order(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
+@router.get("/portfolio/history")
+async def get_portfolio_history(period: str = "7d"):
+    """포트폴리오 히스토리 조회"""
+    try:
+        history = portfolio_history.get_history(period)
+        return {"history": history, "period": period}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/portfolio/performance")
+async def get_portfolio_performance():
+    """포트폴리오 수익률 통계"""
+    try:
+        stats = portfolio_history.get_performance_stats()
+        return stats
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/positions")
+async def get_positions():
+    """현재 포지션 조회"""
+    try:
+        positions = trade_tracker.get_current_positions()
+        return {"positions": positions}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/signals")
+async def get_recent_signals(limit: int = 10):
+    """최근 거래 신호 조회"""
+    try:
+        signals = trade_tracker.get_trade_signals(limit)
+        return {"signals": signals}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/pnl/{symbol}")
+async def get_pnl(request: Request, symbol: str = "BTCUSDT"):
+    """특정 심볼의 손익 조회"""
+    trading_client = get_trading_client(request)
+    
+    try:
+        current_price = await trading_client.get_current_price(symbol)
+        pnl_data = trade_tracker.get_pnl(symbol, current_price)
+        return pnl_data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

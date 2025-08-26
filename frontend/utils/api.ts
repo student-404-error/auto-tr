@@ -78,6 +78,36 @@ export const tradingApi = {
   getSystemStatus: async () => {
     const response = await api.get('/api/status')
     return response.data
+  },
+
+  // 포트폴리오 히스토리 조회
+  getPortfolioHistory: async (period: string = '7d') => {
+    const response = await api.get(`/api/portfolio/history?period=${period}`)
+    return response.data
+  },
+
+  // 포트폴리오 수익률 통계
+  getPortfolioPerformance: async () => {
+    const response = await api.get('/api/portfolio/performance')
+    return response.data
+  },
+
+  // 현재 포지션 조회
+  getPositions: async () => {
+    const response = await api.get('/api/positions')
+    return response.data
+  },
+
+  // 최근 거래 신호 조회
+  getRecentSignals: async (limit: number = 10) => {
+    const response = await api.get(`/api/signals?limit=${limit}`)
+    return response.data
+  },
+
+  // 손익 조회
+  getPnL: async (symbol: string = 'BTCUSDT') => {
+    const response = await api.get(`/api/pnl/${symbol}`)
+    return response.data
   }
 }
 
