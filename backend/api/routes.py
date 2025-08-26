@@ -155,6 +155,15 @@ async def place_manual_order(
 
     try:
         result = await trading_client.place_order(symbol, side, "Market", qty)
+        if result.get("success"):
+            current_price = await trading_client.get_current_price(symbol)
+            trade_tracker.add_trade(
+                symbol,
+                side,
+                float(qty),
+                current_price,
+                signal="manual",
+            )
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

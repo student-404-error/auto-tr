@@ -6,7 +6,7 @@ import json
 from datetime import datetime
 from typing import Dict, Any
 
-from api.routes import router
+from api.routes import router, trade_tracker
 from trading.bybit_client import BybitClient
 from trading.simple_strategy import TradingStrategy
 
@@ -30,7 +30,10 @@ async def startup_event():
 
     # Bybit 클라이언트 초기화
     app.state.trading_client = BybitClient()
-    app.state.trading_strategy = TradingStrategy(app.state.trading_client)
+    app.state.trade_tracker = trade_tracker
+    app.state.trading_strategy = TradingStrategy(
+        app.state.trading_client, trade_tracker
+    )
 
     print("🚀 Bitcoin Auto-Trading System 시작됨")
 
