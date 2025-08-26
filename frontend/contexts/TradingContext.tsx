@@ -8,6 +8,10 @@ interface Portfolio {
   current_btc_price: number
   total_value_usd: number
   timestamp: number
+  error?: string
+  live_trading?: boolean
+  authenticated?: boolean
+  max_trade_amount?: number
 }
 
 interface TradingStatus {
@@ -46,6 +50,11 @@ export function TradingProvider({ children }: { children: ReactNode }) {
       setError(null)
       const data = await tradingApi.getPortfolio()
       setPortfolio(data)
+      
+      // API 키 설정 안내
+      if (data.error || !data.authenticated) {
+        setError('API 키를 설정하여 실제 거래를 시작하세요')
+      }
     } catch (err) {
       setError('포트폴리오 조회 실패')
       console.error('Portfolio fetch error:', err)

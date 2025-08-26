@@ -7,6 +7,10 @@ interface Portfolio {
   current_btc_price: number
   total_value_usd: number
   timestamp: number
+  error?: string
+  live_trading?: boolean
+  authenticated?: boolean
+  max_trade_amount?: number
 }
 
 interface PortfolioCardProps {
@@ -30,6 +34,43 @@ export default function PortfolioCard({ portfolio }: PortfolioCardProps) {
     )
   }
 
+  // API 키 설정 안내
+  if (portfolio.error || !portfolio.authenticated) {
+    return (
+      <div className="card">
+        <div className="flex items-center space-x-3 mb-4">
+          <Wallet className="w-5 h-5 text-crypto-blue" />
+          <h3 className="text-lg font-semibold">포트폴리오</h3>
+          <span className="px-2 py-1 text-xs bg-red-600 text-white rounded">LIVE</span>
+        </div>
+        
+        <div className="bg-yellow-900/20 border border-yellow-500 rounded-lg p-4 mb-4">
+          <h4 className="text-yellow-400 font-medium mb-2">⚠️ API 키 설정 필요</h4>
+          <p className="text-yellow-200 text-sm mb-3">
+            실제 거래를 위해 Bybit API 키를 설정해주세요.
+          </p>
+          <div className="text-xs text-yellow-300">
+            <p>1. backend/.env 파일 수정</p>
+            <p>2. BYBIT_API_KEY와 BYBIT_API_SECRET 입력</p>
+            <p>3. 서버 재시작</p>
+          </div>
+        </div>
+
+        {/* 현재 BTC 가격만 표시 */}
+        <div className="mb-4">
+          <div className="text-sm text-gray-400 mb-1">현재 BTC 가격</div>
+          <div className="text-xl font-bold text-crypto-blue">
+            ${portfolio.current_btc_price?.toLocaleString() || 'N/A'}
+          </div>
+        </div>
+
+        <div className="text-xs text-gray-500">
+          최대 거래 금액: ${portfolio.max_trade_amount || 30}
+        </div>
+      </div>
+    )
+  }
+
   const { balances, total_value_usd } = portfolio
 
   return (
@@ -37,6 +78,9 @@ export default function PortfolioCard({ portfolio }: PortfolioCardProps) {
       <div className="flex items-center space-x-3 mb-6">
         <Wallet className="w-5 h-5 text-crypto-blue" />
         <h3 className="text-lg font-semibold">포트폴리오</h3>
+        {portfolio.live_trading && (
+          <span className="px-2 py-1 text-xs bg-red-600 text-white rounded">LIVE</span>
+        )}
       </div>
 
       {/* 총 자산 */}

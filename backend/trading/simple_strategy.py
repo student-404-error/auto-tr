@@ -12,7 +12,7 @@ class TradingStrategy:
         self.is_active = False
         self.position = None  # None, 'long', 'short'
         self.last_signal = None
-        self.trade_amount = "0.001"  # BTC 거래량
+        self.trade_amount = None  # 동적으로 계산됨 (30달러 예산 기준)
         
         # 전략 파라미터
         self.rsi_period = 14
@@ -89,40 +89,58 @@ class TradingStrategy:
             return None
     
     async def execute_trade(self, signal: str):
-        """거래 실행"""
+        """거래 실행 (30달러 예산 기준 안전 거래)"""
         try:
             current_price = await self.client.get_current_price()
+            
             if signal == "buy":
+                # 안전한 매수 수량 계산
+                safe_qty = await self.client.calculate_safe_order_size("BTCUSDT", "Buy")
+                if not safe_qty:
+                    print("❌ 안전한 매수 수량을 계산할 수 없습니다")
+                    return
+                
                 result = await self.client.place_order(
                     side="Buy",
-                    qty=self.trade_amount,
+                    qty=safe_qty,
                 )
                 if result.get("success"):
                     self.position = "long"
+                    self.trade_amount = safe_qty  # 실제 거래된 수량 저장
                     self.trade_tracker.add_trade(
                         "BTCUSDT",
                         "Buy",
-                        float(self.trade_amount),
+                        float(safe_qty),
                         current_price,
                         signal="buy",
                     )
-                    print(f"🟢 매수 주문 실행: {self.trade_amount} BTC")
+                    order_value = float(safe_qty) * current_price
+                    print(f"🟢 매수 주문 실행: {safe_qty} BTC (${order_value:.2f})")
+                else:
+                    print(f"❌ 매수 주문 실패: {result.get('error', '알 수 없는 오류')}")
 
             elif signal == "sell" and self.position == "long":
+                # 보유 중인 BTC 전량 매도
                 result = await self.client.place_order(
                     side="Sell",
-                    qty=self.trade_amount,
+                    qty=None,  # 자동으로 보유량 계산
                 )
                 if result.get("success"):
                     self.position = None
+                    # 실제 매도된 수량 사용
+                    sold_qty = self.trade_amount if self.trade_amount else "0"
                     self.trade_tracker.add_trade(
                         "BTCUSDT",
                         "Sell",
-                        float(self.trade_amount),
+                        float(sold_qty),
                         current_price,
                         signal="sell",
                     )
-                    print(f"🔴 매도 주문 실행: {self.trade_amount} BTC")
+                    order_value = float(sold_qty) * current_price
+                    print(f"🔴 매도 주문 실행: {sold_qty} BTC (${order_value:.2f})")
+                    self.trade_amount = None  # 포지션 정리
+                else:
+                    print(f"❌ 매도 주문 실패: {result.get('error', '알 수 없는 오류')}")
 
         except Exception as e:
             print(f"거래 실행 오류: {e}")

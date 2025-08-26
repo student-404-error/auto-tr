@@ -3,8 +3,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import asyncio
 import json
+import os
 from datetime import datetime
 from typing import Dict, Any
+from dotenv import load_dotenv
+
+# .env 파일 로드
+load_dotenv()
 
 from api.routes import router, trade_tracker
 from trading.bybit_client import BybitClient

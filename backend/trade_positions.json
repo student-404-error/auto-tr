@@ -1,0 +1,22 @@
+[
+  {
+    "id": "trade_1756209734.379932",
+    "timestamp": "2025-08-26T21:02:14.379968",
+    "symbol": "BTCUSDT",
+    "side": "Buy",
+    "quantity": 0.001,
+    "price": 115215.0,
+    "signal": "manual",
+    "total_value": 115.215
+  },
+  {
+    "id": "trade_1756209740.470683",
+    "timestamp": "2025-08-26T21:02:20.470694",
+    "symbol": "BTCUSDT",
+    "side": "Buy",
+    "quantity": 0.001,
+    "price": 115215.0,
+    "signal": "manual",
+    "total_value": 115.215
+  }
+]

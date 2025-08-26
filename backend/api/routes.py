@@ -26,12 +26,24 @@ def get_trading_strategy(request: Request):
 
 @router.get("/portfolio")
 async def get_portfolio(request: Request):
-    """포트폴리오 현황 조회"""
+    """포트폴리오 현황 조회 (실제 거래 모드)"""
     trading_client = get_trading_client(request)
 
     try:
         balance = await trading_client.get_balance()
         current_price = await trading_client.get_current_price()
+        
+        # API 키가 없는 경우 경고 메시지와 함께 빈 데이터 반환
+        if not balance:
+            return {
+                "balances": {},
+                "current_btc_price": current_price,
+                "total_value_usd": 0,
+                "timestamp": asyncio.get_event_loop().time(),
+                "error": "API 키가 설정되지 않았습니다. 실제 잔고를 조회할 수 없습니다.",
+                "live_trading": True,
+                "authenticated": trading_client.authenticated
+            }
 
         total_usd = 0
         for coin, data in balance.items():
@@ -45,18 +57,22 @@ async def get_portfolio(request: Request):
             "current_btc_price": current_price,
             "total_value_usd": total_usd,
             "timestamp": asyncio.get_event_loop().time(),
+            "live_trading": True,
+            "authenticated": trading_client.authenticated,
+            "max_trade_amount": trading_client.max_trade_amount
         }
         
-        # 포트폴리오 히스토리에 스냅샷 추가
-        portfolio_history.add_snapshot(portfolio_data)
-        
-        # 수익률 통계 추가
-        performance_stats = portfolio_history.get_performance_stats()
-        portfolio_data.update(performance_stats)
-        
-        # BTC 포지션 정보 추가
-        btc_pnl = trade_tracker.get_pnl("BTCUSDT", current_price)
-        portfolio_data["btc_position"] = btc_pnl
+        # 실제 잔고가 있는 경우에만 히스토리에 추가
+        if balance:
+            portfolio_history.add_snapshot(portfolio_data)
+            
+            # 수익률 통계 추가
+            performance_stats = portfolio_history.get_performance_stats()
+            portfolio_data.update(performance_stats)
+            
+            # BTC 포지션 정보 추가
+            btc_pnl = trade_tracker.get_pnl("BTCUSDT", current_price)
+            portfolio_data["btc_position"] = btc_pnl
         
         return portfolio_data
     except Exception as e:

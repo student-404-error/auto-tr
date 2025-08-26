@@ -66,6 +66,28 @@ export default function Dashboard() {
       <Header />
       
       <div className="container mx-auto px-4 py-8">
+        {/* 실제 거래 경고 배너 */}
+        <div className="mb-6 bg-gradient-to-r from-red-600 to-orange-600 border border-red-500 rounded-lg p-4">
+          <div className="flex items-center space-x-3">
+            <div className="flex-shrink-0">
+              <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <div className="flex-1">
+              <h3 className="text-white font-semibold">⚠️ 실제 거래 모드 활성화</h3>
+              <p className="text-red-100 text-sm mt-1">
+                현재 실제 자금으로 거래 중입니다. 최대 거래 금액: $30 | 손실 위험이 있으니 주의하세요.
+              </p>
+            </div>
+            <div className="flex-shrink-0">
+              <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-red-800 text-red-100">
+                LIVE TRADING
+              </span>
+            </div>
+          </div>
+        </div>
+
         {/* 상태 표시 */}
         <div className="mb-6">
           <StatusIndicator 

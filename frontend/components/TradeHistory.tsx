@@ -90,7 +90,10 @@ export default function TradeHistory() {
       <div className="h-80 flex flex-col items-center justify-center text-gray-400">
         <Clock className="w-12 h-12 mb-4 opacity-50" />
         <p>거래 내역이 없습니다</p>
-        <p className="text-sm mt-2">첫 거래를 시작해보세요!</p>
+        <p className="text-sm mt-2">API 키 설정 후 실제 거래를 시작해보세요!</p>
+        <div className="mt-3 px-3 py-1 bg-red-600 text-white text-xs rounded">
+          LIVE TRADING MODE
+        </div>
       </div>
     )
   }

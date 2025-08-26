@@ -37,8 +37,44 @@
    - Bybit API 연동
    - 기술적 분석 기반 매매 전략
    - 24시간 자동 실행
+   - 안전 장치 (최대 거래 금액, 손절매)
 
 2. **대시보드**
    - 실시간 포트폴리오 현황
    - 거래 내역 및 수익률
    - 차트 및 분석 도구
+
+## 🚨 실제 거래 설정 (30달러 예산)
+
+### 1. Bybit API 키 발급
+1. [Bybit](https://www.bybit.com) 계정 생성
+2. API Management에서 API 키 생성
+3. 권한 설정: Spot Trading 활성화
+4. IP 제한 설정 (보안 강화)
+
+### 2. 환경 변수 설정
+```bash
+# backend/.env 파일 수정
+BYBIT_API_KEY=your_actual_api_key
+BYBIT_API_SECRET=your_actual_api_secret
+BYBIT_TESTNET=false
+
+# 안전 거래 설정 (30달러 예산)
+MAX_TRADE_AMOUNT_USD=30.0
+MIN_ORDER_SIZE_USD=5.0
+MAX_POSITION_PERCENTAGE=80.0
+STOP_LOSS_PERCENTAGE=5.0
+```
+
+### 3. 안전 장치
+- **최대 거래 금액**: $30 (설정 가능)
+- **최소 주문 크기**: $5
+- **최대 포지션 비율**: 80% (잔고의 80%까지만 사용)
+- **손절매**: 5% 손실 시 자동 매도
+
+### 4. 주의사항
+⚠️ **실제 자금 손실 위험이 있습니다**
+- 소액으로 테스트 후 점진적 확대
+- 시장 변동성에 따른 손실 가능
+- 24시간 모니터링 권장
+- 전략 백테스팅 후 사용

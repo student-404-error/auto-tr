@@ -14,8 +14,16 @@ export default function StatusIndicator({
   currentPrice 
 }: StatusIndicatorProps) {
   return (
-    <div className="flex items-center justify-between p-4 bg-dark-card rounded-lg border border-gray-700">
+    <div className="flex items-center justify-between p-4 bg-dark-card rounded-lg border border-red-500">
       <div className="flex items-center space-x-6">
+        {/* 실제 거래 모드 표시 */}
+        <div className="flex items-center space-x-2">
+          <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse"></div>
+          <span className="text-sm font-semibold text-red-400">
+            LIVE TRADING MODE
+          </span>
+        </div>
+
         {/* 연결 상태 */}
         <div className="flex items-center space-x-2">
           {isConnected ? (
@@ -39,6 +47,16 @@ export default function StatusIndicator({
             {tradingActive ? '자동매매 실행 중' : '자동매매 중지'}
           </span>
         </div>
+
+        {/* 현재 BTC 가격 */}
+        {currentPrice && (
+          <div className="flex items-center space-x-2">
+            <span className="text-sm text-gray-400">BTC:</span>
+            <span className="text-sm font-medium text-crypto-blue">
+              ${currentPrice.toLocaleString()}
+            </span>
+          </div>
+        )}
       </div>
 
       {/* 현재 시간 */}

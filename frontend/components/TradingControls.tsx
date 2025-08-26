@@ -120,6 +120,13 @@ export default function TradingControls() {
       <div className="border-t border-gray-700 pt-6">
         <h4 className="text-sm font-medium text-gray-400 mb-4">수동 주문</h4>
         
+        {/* 실제 거래 경고 */}
+        <div className="mb-4 p-3 bg-orange-900/20 border border-orange-500 rounded-lg">
+          <p className="text-orange-400 text-xs">
+            ⚠️ 실제 자금으로 거래됩니다. 최대 $30 예산 내에서 안전하게 거래됩니다.
+          </p>
+        </div>
+        
         <div className="mb-4">
           <label className="block text-sm text-gray-400 mb-2">주문량 (BTC)</label>
           <input

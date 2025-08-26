@@ -20,7 +20,7 @@ export default function TradingSignals() {
 
   useEffect(() => {
     fetchSignals()
-    
+
     // 30초마다 신호 업데이트
     const interval = setInterval(fetchSignals, 30000)
     return () => clearInterval(interval)
@@ -107,20 +107,18 @@ export default function TradingSignals() {
             >
               <div className="flex items-center space-x-3">
                 {/* 신호 아이콘 */}
-                <div className={`p-2 rounded-full ${
-                  signal.side === 'Buy' 
-                    ? 'bg-crypto-green/20' 
-                    : 'bg-crypto-red/20'
-                }`}>
+                <div className={`p-2 rounded-full ${signal.side === 'Buy'
+                  ? 'bg-crypto-green/20'
+                  : 'bg-crypto-red/20'
+                  }`}>
                   {getSignalIcon(signal.signal, signal.side)}
                 </div>
 
                 {/* 신호 정보 */}
                 <div>
                   <div className="flex items-center space-x-2">
-                    <span className={`font-medium ${
-                      signal.side === 'Buy' ? 'text-crypto-green' : 'text-crypto-red'
-                    }`}>
+                    <span className={`font-medium ${signal.side === 'Buy' ? 'text-crypto-green' : 'text-crypto-red'
+                      }`}>
                       {getSignalText(signal.signal)}
                     </span>
                     <span className="text-gray-400 text-sm">
@@ -149,7 +147,7 @@ export default function TradingSignals() {
 
       {/* 새로고침 버튼 */}
       <div className="mt-4 text-center">
-        <button 
+        <button
           onClick={fetchSignals}
           className="text-crypto-blue hover:text-crypto-blue/80 text-sm transition-colors"
         >

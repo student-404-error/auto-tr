@@ -24,12 +24,19 @@ class PortfolioHistory:
             json.dump(self.history, f, indent=2)
     
     def add_snapshot(self, portfolio_data: Dict[str, Any]):
-        """포트폴리오 스냅샷 추가"""
+        """포트폴리오 스냅샷 추가 (실제 거래 데이터만)"""
+        # 실제 잔고가 있는 경우에만 스냅샷 추가
+        balances = portfolio_data.get("balances", {})
+        if not balances:
+            print("⚠️ 잔고 데이터가 없어 스냅샷을 추가하지 않습니다.")
+            return
+            
         snapshot = {
             "timestamp": datetime.now().isoformat(),
             "total_value_usd": portfolio_data.get("total_value_usd", 0),
-            "balances": portfolio_data.get("balances", {}),
-            "btc_price": portfolio_data.get("current_btc_price", 0)
+            "balances": balances,
+            "btc_price": portfolio_data.get("current_btc_price", 0),
+            "live_trading": True  # 실제 거래 모드 표시
         }
         
         self.history.append(snapshot)
