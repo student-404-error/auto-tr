@@ -1,11 +1,14 @@
 import asyncio
 from datetime import datetime
 from typing import Dict, Any, Optional
+
 from .bybit_client import BybitClient
+from models.trade_tracker import TradeTracker
 
 class TradingStrategy:
-    def __init__(self, client: BybitClient):
+    def __init__(self, client: BybitClient, trade_tracker: TradeTracker):
         self.client = client
+        self.trade_tracker = trade_tracker
         self.is_active = False
         self.position = None  # None, 'long', 'short'
         self.last_signal = None
@@ -88,24 +91,39 @@ class TradingStrategy:
     async def execute_trade(self, signal: str):
         """거래 실행"""
         try:
-            if signal == 'buy':
+            current_price = await self.client.get_current_price()
+            if signal == "buy":
                 result = await self.client.place_order(
                     side="Buy",
-                    qty=self.trade_amount
+                    qty=self.trade_amount,
                 )
-                if result.get('success'):
-                    self.position = 'long'
+                if result.get("success"):
+                    self.position = "long"
+                    self.trade_tracker.add_trade(
+                        "BTCUSDT",
+                        "Buy",
+                        float(self.trade_amount),
+                        current_price,
+                        signal="buy",
+                    )
                     print(f"🟢 매수 주문 실행: {self.trade_amount} BTC")
-                
-            elif signal == 'sell' and self.position == 'long':
+
+            elif signal == "sell" and self.position == "long":
                 result = await self.client.place_order(
                     side="Sell",
-                    qty=self.trade_amount
+                    qty=self.trade_amount,
                 )
-                if result.get('success'):
+                if result.get("success"):
                     self.position = None
+                    self.trade_tracker.add_trade(
+                        "BTCUSDT",
+                        "Sell",
+                        float(self.trade_amount),
+                        current_price,
+                        signal="sell",
+                    )
                     print(f"🔴 매도 주문 실행: {self.trade_amount} BTC")
-                    
+
         except Exception as e:
             print(f"거래 실행 오류: {e}")
     
