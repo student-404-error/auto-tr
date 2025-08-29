@@ -4,7 +4,7 @@ import json
 import os
 
 class TradeTracker:
-    def __init__(self, data_file: str = "backend/trade_positions.json"):
+    def __init__(self, data_file: str = "./trade_positions.json"):
         self.data_file = data_file
         self.positions = self._load_positions()
         print(f"📁 TradeTracker 초기화: {self.data_file} (기존 신호: {len(self.positions)}개)")

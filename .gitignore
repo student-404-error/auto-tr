@@ -7,7 +7,7 @@
 backend/.env
 frontend/.env.local
 backend/portfolio_history.json
-
+backend/trade_positions.json
 # Python
 __pycache__/
 *.py[cod]
