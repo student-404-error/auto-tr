@@ -92,6 +92,22 @@ export default function PerformanceChart() {
     )
   }
 
+  // 데이터가 없는 경우 (실제 거래 시작 전)
+  if (!data || data.length === 0) {
+    return (
+      <div className="h-80 flex flex-col items-center justify-center text-gray-400">
+        <TrendingUp className="w-16 h-16 mb-4 opacity-50" />
+        <p className="text-lg mb-2">포트폴리오 성과 데이터가 없습니다</p>
+        <p className="text-sm text-center">
+          실제 거래를 시작하면 포트폴리오 성과가 기록됩니다
+        </p>
+        <div className="mt-4 px-4 py-2 bg-red-600 text-white text-sm rounded">
+          LIVE TRADING MODE - 실제 거래 데이터만 표시
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div>
       {/* 수익률 표시 */}

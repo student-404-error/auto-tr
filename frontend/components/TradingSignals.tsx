@@ -37,11 +37,25 @@ export default function TradingSignals() {
     }
   }
 
+  const createTestSignal = async (signalType: string) => {
+    try {
+      await tradingApi.createTestSignal(signalType)
+      // 신호 생성 후 목록 새로고침
+      await fetchSignals()
+    } catch (error) {
+      console.error('테스트 신호 생성 실패:', error)
+    }
+  }
+
   const getSignalIcon = (signal: string, side: string) => {
     if (side === 'Buy') {
       return <TrendingUp className="w-4 h-4 text-crypto-green" />
-    } else {
+    } else if (side === 'Sell') {
       return <TrendingDown className="w-4 h-4 text-crypto-red" />
+    } else if (side === 'Hold') {
+      return <Clock className="w-4 h-4 text-yellow-400" />
+    } else {
+      return <Clock className="w-4 h-4 text-gray-400" />
     }
   }
 
@@ -51,6 +65,8 @@ export default function TradingSignals() {
         return '매수 신호'
       case 'sell':
         return '매도 신호'
+      case 'hold':
+        return '보류 신호'
       case 'rsi_oversold':
         return 'RSI 과매도'
       case 'rsi_overbought':
@@ -107,18 +123,24 @@ export default function TradingSignals() {
             >
               <div className="flex items-center space-x-3">
                 {/* 신호 아이콘 */}
-                <div className={`p-2 rounded-full ${signal.side === 'Buy'
-                  ? 'bg-crypto-green/20'
-                  : 'bg-crypto-red/20'
-                  }`}>
+                <div className={`p-2 rounded-full ${
+                  signal.side === 'Buy' ? 'bg-crypto-green/20' :
+                  signal.side === 'Sell' ? 'bg-crypto-red/20' :
+                  signal.side === 'Hold' ? 'bg-yellow-400/20' :
+                  'bg-gray-600/20'
+                }`}>
                   {getSignalIcon(signal.signal, signal.side)}
                 </div>
 
                 {/* 신호 정보 */}
                 <div>
                   <div className="flex items-center space-x-2">
-                    <span className={`font-medium ${signal.side === 'Buy' ? 'text-crypto-green' : 'text-crypto-red'
-                      }`}>
+                    <span className={`font-medium ${
+                      signal.side === 'Buy' ? 'text-crypto-green' :
+                      signal.side === 'Sell' ? 'text-crypto-red' :
+                      signal.side === 'Hold' ? 'text-yellow-400' :
+                      'text-gray-400'
+                    }`}>
                       {getSignalText(signal.signal)}
                     </span>
                     <span className="text-gray-400 text-sm">
@@ -134,7 +156,7 @@ export default function TradingSignals() {
               {/* 거래 상세 */}
               <div className="text-right">
                 <div className="font-medium">
-                  {signal.quantity.toFixed(6)} BTC
+                  {signal.side === 'Hold' ? '보류' : `${signal.quantity.toFixed(6)} BTC`}
                 </div>
                 <div className="text-sm text-gray-400">
                   ${signal.price.toLocaleString()}
@@ -145,13 +167,31 @@ export default function TradingSignals() {
         </div>
       )}
 
-      {/* 새로고침 버튼 */}
-      <div className="mt-4 text-center">
+      {/* 새로고침 및 테스트 버튼 */}
+      <div className="mt-4 flex justify-center space-x-3 text-xs">
         <button
           onClick={fetchSignals}
-          className="text-crypto-blue hover:text-crypto-blue/80 text-sm transition-colors"
+          className="text-crypto-blue hover:text-crypto-blue/80 transition-colors"
         >
           새로고침
+        </button>
+        <button
+          onClick={() => createTestSignal('buy')}
+          className="text-crypto-green hover:text-crypto-green/80 transition-colors"
+        >
+          매수 테스트
+        </button>
+        <button
+          onClick={() => createTestSignal('sell')}
+          className="text-crypto-red hover:text-crypto-red/80 transition-colors"
+        >
+          매도 테스트
+        </button>
+        <button
+          onClick={() => createTestSignal('hold')}
+          className="text-yellow-400 hover:text-yellow-300 transition-colors"
+        >
+          보류 테스트
         </button>
       </div>
     </div>

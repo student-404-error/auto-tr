@@ -1,22 +1,120 @@
 [
-  {
-    "id": "trade_1756209734.379932",
-    "timestamp": "2025-08-26T21:02:14.379968",
-    "symbol": "BTCUSDT",
-    "side": "Buy",
-    "quantity": 0.001,
-    "price": 115215.0,
-    "signal": "manual",
-    "total_value": 115.215
-  },
-  {
-    "id": "trade_1756209740.470683",
-    "timestamp": "2025-08-26T21:02:20.470694",
-    "symbol": "BTCUSDT",
-    "side": "Buy",
-    "quantity": 0.001,
-    "price": 115215.0,
-    "signal": "manual",
-    "total_value": 115.215
-  }
+    {
+        "id": "trade_1756445027.156149",
+        "timestamp": "2025-08-29T14:23:47.156178",
+        "symbol": "BTCUSDT",
+        "side": "Hold",
+        "quantity": 0.0,
+        "price": 111333.1,
+        "signal": "hold",
+        "total_value": 0.0
+    },
+    {
+        "id": "signal_1756445156.937629",
+        "timestamp": "2025-08-29T14:25:56.937641",
+        "symbol": "BTCUSDT",
+        "side": "Buy",
+        "quantity": 0.002286,
+        "price": 111380.57,
+        "signal": "buy"
+    },
+    {
+        "id": "signal_1756445180.944072",
+        "timestamp": "2025-08-29T14:26:20.944082",
+        "symbol": "BTCUSDT",
+        "side": "Sell",
+        "quantity": 0.006141,
+        "price": 118417.79,
+        "signal": "sell"
+    },
+    {
+        "id": "trade_1756445278.952349",
+        "timestamp": "2025-08-29T14:27:58.952405",
+        "symbol": "BTCUSDT",
+        "side": "Hold",
+        "quantity": 0.0,
+        "price": 111255.6,
+        "signal": "hold",
+        "total_value": 0.0
+    },
+    {
+        "id": "trade_1756445339.128904",
+        "timestamp": "2025-08-29T14:28:59.128954",
+        "symbol": "BTCUSDT",
+        "side": "Hold",
+        "quantity": 0.0,
+        "price": 111282.8,
+        "signal": "hold",
+        "total_value": 0.0
+    },
+    {
+        "id": "trade_1756445399.309399",
+        "timestamp": "2025-08-29T14:29:59.309412",
+        "symbol": "BTCUSDT",
+        "side": "Hold",
+        "quantity": 0.0,
+        "price": 111309.7,
+        "signal": "hold",
+        "total_value": 0.0
+    },
+    {
+        "id": "trade_1756445459.480672",
+        "timestamp": "2025-08-29T14:30:59.480697",
+        "symbol": "BTCUSDT",
+        "side": "Hold",
+        "quantity": 0.0,
+        "price": 111283.9,
+        "signal": "hold",
+        "total_value": 0.0
+    },
+    {
+        "id": "trade_1756445519.667221",
+        "timestamp": "2025-08-29T14:31:59.667267",
+        "symbol": "BTCUSDT",
+        "side": "Hold",
+        "quantity": 0.0,
+        "price": 111245.9,
+        "signal": "hold",
+        "total_value": 0.0
+    },
+    {
+        "id": "trade_1756445579.857538",
+        "timestamp": "2025-08-29T14:32:59.857568",
+        "symbol": "BTCUSDT",
+        "side": "Hold",
+        "quantity": 0.0,
+        "price": 111272.0,
+        "signal": "hold",
+        "total_value": 0.0
+    },
+    {
+        "id": "trade_1756445640.038739",
+        "timestamp": "2025-08-29T14:34:00.038786",
+        "symbol": "BTCUSDT",
+        "side": "Hold",
+        "quantity": 0.0,
+        "price": 111243.9,
+        "signal": "hold",
+        "total_value": 0.0
+    },
+    {
+        "id": "trade_1756445700.215088",
+        "timestamp": "2025-08-29T14:35:00.215108",
+        "symbol": "BTCUSDT",
+        "side": "Hold",
+        "quantity": 0.0,
+        "price": 111263.3,
+        "signal": "hold",
+        "total_value": 0.0
+    },
+    {
+        "id": "trade_1756445760.393922",
+        "timestamp": "2025-08-29T14:36:00.393946",
+        "symbol": "BTCUSDT",
+        "side": "Hold",
+        "quantity": 0.0,
+        "price": 111180.7,
+        "signal": "hold",
+        "total_value": 0.0
+    }
 ]

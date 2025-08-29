@@ -51,9 +51,15 @@ class TradingStrategy:
         # 2. 기술적 분석
         signal = await self.analyze_market(kline_data)
         
-        # 3. 거래 실행
-        if signal and signal != self.last_signal:
-            await self.execute_trade(signal)
+        # 3. 신호 기록 및 거래 실행 (모든 신호 기록)
+        if signal:
+            # 모든 신호를 기록 (연속 신호도 포함)
+            await self.record_signal(signal)
+            
+            # 실제 거래는 buy/sell만 실행 (연속 거래 방지)
+            if signal in ['buy', 'sell'] and signal != self.last_signal:
+                await self.execute_trade(signal)
+            
             self.last_signal = signal
     
     async def analyze_market(self, kline_data: list) -> Optional[str]:
@@ -76,18 +82,41 @@ class TradingStrategy:
             # 간단한 매매 신호
             # 매수 신호: 현재가가 평균보다 2% 이상 낮을 때
             if current_price < avg_price * 0.98 and self.position != 'long':
+                print(f"🟢 Buy signal!!")
                 return 'buy'
             
             # 매도 신호: 현재가가 평균보다 2% 이상 높을 때
             elif current_price > avg_price * 1.02 and self.position == 'long':
+                print(f"🔴 Sell signal!!")
                 return 'sell'
             
-            return None
+            # 보류 신호: 매매 조건에 맞지 않을 때
+            else:
+                print(f"🟡 Hold signal - 현재 시장 상황에서는 거래하지 않음")
+                return 'hold'
             
         except Exception as e:
             print(f"시장 분석 오류: {e}")
             return None
     
+    async def record_signal(self, signal: str):
+        """신호 기록 (거래 실행 없이 신호만 기록)"""
+        try:
+            current_price = await self.client.get_current_price()
+            
+            # hold 신호의 경우 거래량을 0으로 설정
+            if signal == 'hold':
+                self.trade_tracker.add_trade(
+                    "BTCUSDT",
+                    "Hold",  # 보류 상태
+                    0.0,  # 거래량 0
+                    current_price,
+                    signal="hold",
+                )
+                print(f"🟡 보류 신호 기록: 현재가 ${current_price:.2f}")
+        except Exception as e:
+            print(f"신호 기록 오류: {e}")
+
     async def execute_trade(self, signal: str):
         """거래 실행 (30달러 예산 기준 안전 거래)"""
         try:

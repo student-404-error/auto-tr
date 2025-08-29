@@ -55,11 +55,15 @@ export default function PositionCard() {
         <div className="flex items-center space-x-3 mb-4">
           <Target className="w-5 h-5 text-crypto-blue" />
           <h3 className="text-lg font-semibold">현재 포지션</h3>
+          <span className="px-2 py-1 text-xs bg-red-600 text-white rounded">LIVE</span>
         </div>
         <div className="text-center py-8 text-gray-400">
           <Target className="w-12 h-12 mx-auto mb-4 opacity-50" />
-          <p>보유 중인 포지션이 없습니다</p>
-          <p className="text-sm mt-2">첫 거래를 시작해보세요!</p>
+          <p>보유 중인 BTC 포지션이 없습니다</p>
+          <p className="text-sm mt-2">실제 거래를 시작하면 포지션이 표시됩니다</p>
+          <div className="mt-3 px-3 py-1 bg-green-600 text-white text-xs rounded">
+            실제 거래 모드 활성화됨
+          </div>
         </div>
       </div>
     )
@@ -72,6 +76,7 @@ export default function PositionCard() {
       <div className="flex items-center space-x-3 mb-6">
         <Target className="w-5 h-5 text-crypto-blue" />
         <h3 className="text-lg font-semibold">BTC 포지션</h3>
+        <span className="px-2 py-1 text-xs bg-red-600 text-white rounded">LIVE</span>
       </div>
 
       {/* 손익 표시 */}

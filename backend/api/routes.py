@@ -65,14 +65,14 @@ async def get_portfolio(request: Request):
         # 실제 잔고가 있는 경우에만 히스토리에 추가
         if balance:
             portfolio_history.add_snapshot(portfolio_data)
-            
-            # 수익률 통계 추가
-            performance_stats = portfolio_history.get_performance_stats()
-            portfolio_data.update(performance_stats)
-            
-            # BTC 포지션 정보 추가
-            btc_pnl = trade_tracker.get_pnl("BTCUSDT", current_price)
-            portfolio_data["btc_position"] = btc_pnl
+        
+        # 수익률 통계 추가 (잔고가 없어도 기본값 반환)
+        performance_stats = portfolio_history.get_performance_stats()
+        portfolio_data.update(performance_stats)
+        
+        # BTC 포지션 정보 추가
+        btc_pnl = trade_tracker.get_pnl("BTCUSDT", current_price)
+        portfolio_data["btc_position"] = btc_pnl
         
         return portfolio_data
     except Exception as e:
@@ -216,8 +216,8 @@ async def get_positions():
 
 
 @router.get("/signals")
-async def get_recent_signals(limit: int = 10):
-    """최근 거래 신호 조회"""
+async def get_recent_signals(limit: int = 5):
+    """최근 거래 신호 조회 (기본 5개)"""
     try:
         signals = trade_tracker.get_trade_signals(limit)
         return {"signals": signals}
@@ -234,5 +234,19 @@ async def get_pnl(request: Request, symbol: str = "BTCUSDT"):
         current_price = await trading_client.get_current_price(symbol)
         pnl_data = trade_tracker.get_pnl(symbol, current_price)
         return pnl_data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/signals/test")
+async def create_test_signal(signal_type: str = "buy"):
+    """테스트 신호 생성 (개발용)"""
+    try:
+        # buy, sell, hold 신호 지원
+        if signal_type not in ["buy", "sell", "hold"]:
+            raise HTTPException(status_code=400, detail="signal_type은 buy, sell, hold 중 하나여야 합니다")
+        
+        signal = trade_tracker.add_test_signal("BTCUSDT", signal_type)
+        return {"message": f"{signal_type} 테스트 신호 생성됨", "signal": signal}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

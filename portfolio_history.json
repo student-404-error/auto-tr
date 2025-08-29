@@ -1,34 +1,370 @@
 [
   {
-    "timestamp": "2025-08-26T21:17:36.893286",
+    "timestamp": "2025-08-29T14:23:32.773904",
     "total_value_usd": 30.55075817,
     "balances": {
       "XRP": {
         "balance": 0.003143,
-        "available": 0.0
+        "available": 0.003143
       },
       "USDT": {
         "balance": 30.55075817,
-        "available": 0.0
+        "available": 30.55075817
       }
     },
-    "btc_price": 109646.4,
+    "btc_price": 111333.2,
     "live_trading": true
   },
   {
-    "timestamp": "2025-08-26T21:17:37.081796",
+    "timestamp": "2025-08-29T14:23:43.506914",
     "total_value_usd": 30.55075817,
     "balances": {
       "XRP": {
         "balance": 0.003143,
-        "available": 0.0
+        "available": 0.003143
       },
       "USDT": {
         "balance": 30.55075817,
-        "available": 0.0
+        "available": 30.55075817
       }
     },
-    "btc_price": 109646.4,
+    "btc_price": 111333.1,
+    "live_trading": true
+  },
+  {
+    "timestamp": "2025-08-29T14:23:43.682918",
+    "total_value_usd": 30.55075817,
+    "balances": {
+      "XRP": {
+        "balance": 0.003143,
+        "available": 0.003143
+      },
+      "USDT": {
+        "balance": 30.55075817,
+        "available": 30.55075817
+      }
+    },
+    "btc_price": 111333.1,
+    "live_trading": true
+  },
+  {
+    "timestamp": "2025-08-29T14:24:14.409443",
+    "total_value_usd": 30.55075817,
+    "balances": {
+      "XRP": {
+        "balance": 0.003143,
+        "available": 0.003143
+      },
+      "USDT": {
+        "balance": 30.55075817,
+        "available": 30.55075817
+      }
+    },
+    "btc_price": 111300.1,
+    "live_trading": true
+  },
+  {
+    "timestamp": "2025-08-29T14:24:44.417619",
+    "total_value_usd": 30.55075817,
+    "balances": {
+      "XRP": {
+        "balance": 0.003143,
+        "available": 0.003143
+      },
+      "USDT": {
+        "balance": 30.55075817,
+        "available": 30.55075817
+      }
+    },
+    "btc_price": 111290.9,
+    "live_trading": true
+  },
+  {
+    "timestamp": "2025-08-29T14:25:14.408969",
+    "total_value_usd": 30.55075817,
+    "balances": {
+      "XRP": {
+        "balance": 0.003143,
+        "available": 0.003143
+      },
+      "USDT": {
+        "balance": 30.55075817,
+        "available": 30.55075817
+      }
+    },
+    "btc_price": 111294.8,
+    "live_trading": true
+  },
+  {
+    "timestamp": "2025-08-29T14:26:17.537264",
+    "total_value_usd": 30.55075817,
+    "balances": {
+      "XRP": {
+        "balance": 0.003143,
+        "available": 0.003143
+      },
+      "USDT": {
+        "balance": 30.55075817,
+        "available": 30.55075817
+      }
+    },
+    "btc_price": 111274.5,
+    "live_trading": true
+  },
+  {
+    "timestamp": "2025-08-29T14:27:57.712784",
+    "total_value_usd": 30.55075817,
+    "balances": {
+      "XRP": {
+        "balance": 0.003143,
+        "available": 0.003143
+      },
+      "USDT": {
+        "balance": 30.55075817,
+        "available": 30.55075817
+      }
+    },
+    "btc_price": 111255.7,
+    "live_trading": true
+  },
+  {
+    "timestamp": "2025-08-29T14:27:58.127133",
+    "total_value_usd": 30.55075817,
+    "balances": {
+      "XRP": {
+        "balance": 0.003143,
+        "available": 0.003143
+      },
+      "USDT": {
+        "balance": 30.55075817,
+        "available": 30.55075817
+      }
+    },
+    "btc_price": 111255.6,
+    "live_trading": true
+  },
+  {
+    "timestamp": "2025-08-29T14:28:28.411802",
+    "total_value_usd": 30.55075817,
+    "balances": {
+      "XRP": {
+        "balance": 0.003143,
+        "available": 0.003143
+      },
+      "USDT": {
+        "balance": 30.55075817,
+        "available": 30.55075817
+      }
+    },
+    "btc_price": 111264.8,
+    "live_trading": true
+  },
+  {
+    "timestamp": "2025-08-29T14:28:58.426448",
+    "total_value_usd": 30.55075817,
+    "balances": {
+      "XRP": {
+        "balance": 0.003143,
+        "available": 0.003143
+      },
+      "USDT": {
+        "balance": 30.55075817,
+        "available": 30.55075817
+      }
+    },
+    "btc_price": 111282.8,
+    "live_trading": true
+  },
+  {
+    "timestamp": "2025-08-29T14:29:28.542857",
+    "total_value_usd": 30.55075817,
+    "balances": {
+      "XRP": {
+        "balance": 0.003143,
+        "available": 0.003143
+      },
+      "USDT": {
+        "balance": 30.55075817,
+        "available": 30.55075817
+      }
+    },
+    "btc_price": 111332.0,
+    "live_trading": true
+  },
+  {
+    "timestamp": "2025-08-29T14:29:58.408649",
+    "total_value_usd": 30.55075817,
+    "balances": {
+      "XRP": {
+        "balance": 0.003143,
+        "available": 0.003143
+      },
+      "USDT": {
+        "balance": 30.55075817,
+        "available": 30.55075817
+      }
+    },
+    "btc_price": 111322.9,
+    "live_trading": true
+  },
+  {
+    "timestamp": "2025-08-29T14:30:28.403655",
+    "total_value_usd": 30.55075817,
+    "balances": {
+      "XRP": {
+        "balance": 0.003143,
+        "available": 0.003143
+      },
+      "USDT": {
+        "balance": 30.55075817,
+        "available": 30.55075817
+      }
+    },
+    "btc_price": 111292.1,
+    "live_trading": true
+  },
+  {
+    "timestamp": "2025-08-29T14:30:58.430914",
+    "total_value_usd": 30.55075817,
+    "balances": {
+      "XRP": {
+        "balance": 0.003143,
+        "available": 0.003143
+      },
+      "USDT": {
+        "balance": 30.55075817,
+        "available": 30.55075817
+      }
+    },
+    "btc_price": 111283.9,
+    "live_trading": true
+  },
+  {
+    "timestamp": "2025-08-29T14:31:29.402440",
+    "total_value_usd": 30.55075817,
+    "balances": {
+      "XRP": {
+        "balance": 0.003143,
+        "available": 0.003143
+      },
+      "USDT": {
+        "balance": 30.55075817,
+        "available": 30.55075817
+      }
+    },
+    "btc_price": 111233.7,
+    "live_trading": true
+  },
+  {
+    "timestamp": "2025-08-29T14:32:29.417100",
+    "total_value_usd": 30.55075817,
+    "balances": {
+      "XRP": {
+        "balance": 0.003143,
+        "available": 0.003143
+      },
+      "USDT": {
+        "balance": 30.55075817,
+        "available": 30.55075817
+      }
+    },
+    "btc_price": 111268.7,
+    "live_trading": true
+  },
+  {
+    "timestamp": "2025-08-29T14:33:29.400871",
+    "total_value_usd": 30.55075817,
+    "balances": {
+      "XRP": {
+        "balance": 0.003143,
+        "available": 0.003143
+      },
+      "USDT": {
+        "balance": 30.55075817,
+        "available": 30.55075817
+      }
+    },
+    "btc_price": 111266.2,
+    "live_trading": true
+  },
+  {
+    "timestamp": "2025-08-29T14:34:29.405623",
+    "total_value_usd": 30.55075817,
+    "balances": {
+      "XRP": {
+        "balance": 0.003143,
+        "available": 0.003143
+      },
+      "USDT": {
+        "balance": 30.55075817,
+        "available": 30.55075817
+      }
+    },
+    "btc_price": 111257.6,
+    "live_trading": true
+  },
+  {
+    "timestamp": "2025-08-29T14:35:29.406448",
+    "total_value_usd": 30.55075817,
+    "balances": {
+      "XRP": {
+        "balance": 0.003143,
+        "available": 0.003143
+      },
+      "USDT": {
+        "balance": 30.55075817,
+        "available": 30.55075817
+      }
+    },
+    "btc_price": 111225.0,
+    "live_trading": true
+  },
+  {
+    "timestamp": "2025-08-29T14:35:57.747738",
+    "total_value_usd": 30.55075817,
+    "balances": {
+      "XRP": {
+        "balance": 0.003143,
+        "available": 0.003143
+      },
+      "USDT": {
+        "balance": 30.55075817,
+        "available": 30.55075817
+      }
+    },
+    "btc_price": 111180.7,
+    "live_trading": true
+  },
+  {
+    "timestamp": "2025-08-29T14:36:00.807422",
+    "total_value_usd": 30.55075817,
+    "balances": {
+      "XRP": {
+        "balance": 0.003143,
+        "available": 0.003143
+      },
+      "USDT": {
+        "balance": 30.55075817,
+        "available": 30.55075817
+      }
+    },
+    "btc_price": 111180.7,
+    "live_trading": true
+  },
+  {
+    "timestamp": "2025-08-29T14:36:01.085840",
+    "total_value_usd": 30.55075817,
+    "balances": {
+      "XRP": {
+        "balance": 0.003143,
+        "available": 0.003143
+      },
+      "USDT": {
+        "balance": 30.55075817,
+        "available": 30.55075817
+      }
+    },
+    "btc_price": 111180.7,
     "live_trading": true
   }
 ]

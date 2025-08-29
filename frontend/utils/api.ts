@@ -99,7 +99,7 @@ export const tradingApi = {
   },
 
   // 최근 거래 신호 조회
-  getRecentSignals: async (limit: number = 10) => {
+  getRecentSignals: async (limit: number = 5) => {
     const response = await api.get(`/api/signals?limit=${limit}`)
     return response.data
   },
@@ -107,6 +107,12 @@ export const tradingApi = {
   // 손익 조회
   getPnL: async (symbol: string = 'BTCUSDT') => {
     const response = await api.get(`/api/pnl/${symbol}`)
+    return response.data
+  },
+
+  // 테스트 신호 생성 (개발용)
+  createTestSignal: async (signalType: string = 'buy') => {
+    const response = await api.post(`/api/signals/test?signal_type=${signalType}`)
     return response.data
   }
 }

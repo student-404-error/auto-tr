@@ -4,24 +4,45 @@ import json
 import os
 
 class TradeTracker:
-    def __init__(self, data_file: str = "trade_positions.json"):
+    def __init__(self, data_file: str = "backend/trade_positions.json"):
         self.data_file = data_file
         self.positions = self._load_positions()
+        print(f"📁 TradeTracker 초기화: {self.data_file} (기존 신호: {len(self.positions)}개)")
     
     def _load_positions(self) -> List[Dict]:
-        """포지션 데이터 로드"""
-        if os.path.exists(self.data_file):
-            try:
-                with open(self.data_file, 'r') as f:
-                    return json.load(f)
-            except:
+        """파일에서 포지션 데이터 로드"""
+        try:
+            if not os.path.exists(self.data_file):
+                print(f"📄 신호 파일이 없어 새로 생성: {self.data_file}")
                 return []
-        return []
+                
+            with open(self.data_file, 'r') as f:
+                data = json.load(f)
+                print(f"📄 신호 파일 로드 완료: {len(data)}개 기존 신호")
+                return data
+        except FileNotFoundError:
+            print(f"📄 신호 파일이 없어 새로 생성: {self.data_file}")
+            return []
+        except Exception as e:
+            print(f"❌ 포지션 로드 오류: {e}")
+            import traceback
+            traceback.print_exc()
+            return []
     
     def _save_positions(self):
-        """포지션 데이터 저장"""
-        with open(self.data_file, 'w') as f:
-            json.dump(self.positions, f, indent=2)
+        """포지션 데이터를 파일에 저장"""
+        try:
+            # 디렉터리가 없으면 생성
+            os.makedirs(os.path.dirname(self.data_file), exist_ok=True)
+            
+            with open(self.data_file, 'w') as f:
+                json.dump(self.positions, f, indent=2, ensure_ascii=False)
+            
+            print(f"💾 신호 저장 완료: {self.data_file} ({len(self.positions)}개 신호)")
+        except Exception as e:
+            print(f"❌ 포지션 저장 오류: {e}")
+            import traceback
+            traceback.print_exc()
     
     def add_trade(self, symbol: str, side: str, qty: float, price: float, signal: str = None):
         """거래 기록 추가"""
@@ -32,12 +53,14 @@ class TradeTracker:
             "side": side,  # Buy or Sell
             "quantity": qty,
             "price": price,
-            "signal": signal,  # 매매 신호 (buy, sell, manual)
+            "signal": signal,  # 매매 신호 (buy, sell, manual, hold)
             "total_value": qty * price
         }
         
         self.positions.append(trade)
         self._save_positions()
+        
+        print(f"📝 신호 추가됨: {signal} ({side}) - 총 {len(self.positions)}개 신호 저장됨")
         
         return trade
     
@@ -105,11 +128,46 @@ class TradeTracker:
             "current_value": current_value
         }
     
-    def get_trade_signals(self, limit: int = 10) -> List[Dict]:
-        """최근 거래 신호 조회"""
+    def get_trade_signals(self, limit: int = 5) -> List[Dict]:
+        """최근 거래 신호 조회 (기본 5개)"""
         signals = [
             trade for trade in self.positions 
             if trade.get("signal") and trade["signal"] != "manual"
         ]
         
-        return sorted(signals, key=lambda x: x["timestamp"], reverse=True)[:limit]
+        sorted_signals = sorted(signals, key=lambda x: x["timestamp"], reverse=True)[:limit]
+        print(f"📊 신호 조회: 전체 {len(signals)}개 중 최신 {len(sorted_signals)}개 반환")
+        
+        return sorted_signals
+    
+    def add_test_signal(self, symbol: str = "BTCUSDT", signal_type: str = "buy"):
+        """테스트 신호 추가 (개발용)"""
+        import random
+        
+        if signal_type == "hold":
+            test_signal = {
+                "id": f"signal_{datetime.now().timestamp()}",
+                "timestamp": datetime.now().isoformat(),
+                "symbol": symbol,
+                "side": "Hold",
+                "quantity": 0.0,  # 보류 신호는 거래량 0
+                "price": round(random.uniform(100000, 120000), 2),
+                "signal": signal_type
+            }
+        else:
+            test_signal = {
+                "id": f"signal_{datetime.now().timestamp()}",
+                "timestamp": datetime.now().isoformat(),
+                "symbol": symbol,
+                "side": "Buy" if signal_type == "buy" else "Sell",
+                "quantity": round(random.uniform(0.001, 0.01), 6),
+                "price": round(random.uniform(100000, 120000), 2),
+                "signal": signal_type
+            }
+        
+        self.positions.append(test_signal)
+        self._save_positions()
+        
+        print(f"🧪 테스트 신호 추가됨: {signal_type} - 총 {len(self.positions)}개 신호 저장됨")
+        
+        return test_signal
