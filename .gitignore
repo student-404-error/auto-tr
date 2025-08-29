@@ -6,7 +6,8 @@
 .env.production.local
 backend/.env
 frontend/.env.local
-backend/portfolio_history.json
+portfolio_history.json
+backend/trade_positions.json
 
 # Python
 __pycache__/
