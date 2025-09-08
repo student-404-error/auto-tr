@@ -114,6 +114,18 @@ export const tradingApi = {
   createTestSignal: async (signalType: string = 'buy') => {
     const response = await api.post(`/api/signals/test?signal_type=${signalType}`)
     return response.data
+  },
+
+  // 다중 자산 포트폴리오 조회
+  getMultiAssetPortfolio: async () => {
+    const response = await api.get('/api/portfolio/multi-asset')
+    return response.data
+  },
+
+  // 자산 배분 현황 조회
+  getAssetAllocation: async () => {
+    const response = await api.get('/api/portfolio/allocation')
+    return response.data
   }
 }
 
