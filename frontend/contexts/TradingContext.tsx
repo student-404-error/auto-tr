@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useState, ReactNode } from 'react'
 import { tradingApi } from '@/utils/api'
+import { PortfolioData } from '@/services/portfolioService'
 
 interface Portfolio {
   balances: Record<string, { balance: number; available: number }>
@@ -23,12 +24,14 @@ interface TradingStatus {
 
 interface TradingContextType {
   portfolio: Portfolio | null
+  multiAssetPortfolio: PortfolioData | null
   tradingStatus: TradingStatus | null
   currentPrice: number | null
   isLoading: boolean
   error: string | null
 
   fetchPortfolio: () => Promise<void>
+  fetchMultiAssetPortfolio: () => Promise<void>
   fetchTradingStatus: () => Promise<void>
   fetchCurrentPrice: () => Promise<void>
   startTrading: () => Promise<void>
@@ -40,6 +43,7 @@ const TradingContext = createContext<TradingContextType | undefined>(undefined)
 
 export function TradingProvider({ children }: { children: ReactNode }) {
   const [portfolio, setPortfolio] = useState<Portfolio | null>(null)
+  const [multiAssetPortfolio, setMultiAssetPortfolio] = useState<PortfolioData | null>(null)
   const [tradingStatus, setTradingStatus] = useState<TradingStatus | null>(null)
   const [currentPrice, setCurrentPrice] = useState<number | null>(null)
   const [isLoading, setIsLoading] = useState(false)
@@ -58,6 +62,17 @@ export function TradingProvider({ children }: { children: ReactNode }) {
     } catch (err) {
       setError('포트폴리오 조회 실패')
       console.error('Portfolio fetch error:', err)
+    }
+  }
+
+  const fetchMultiAssetPortfolio = async () => {
+    try {
+      setError(null)
+      const data = await tradingApi.getMultiAssetPortfolio()
+      setMultiAssetPortfolio(data)
+    } catch (err) {
+      setError('다중 자산 포트폴리오 조회 실패')
+      console.error('Multi-asset portfolio fetch error:', err)
     }
   }
 
@@ -127,11 +142,13 @@ export function TradingProvider({ children }: { children: ReactNode }) {
 
   const value: TradingContextType = {
     portfolio,
+    multiAssetPortfolio,
     tradingStatus,
     currentPrice,
     isLoading,
     error,
     fetchPortfolio,
+    fetchMultiAssetPortfolio,
     fetchTradingStatus,
     fetchCurrentPrice,
     startTrading,
