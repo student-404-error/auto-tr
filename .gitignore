@@ -250,4 +250,8 @@ logs/
 # Local configuration
 config.local.json
 settings.local.json
+
+# etc
 .kiro/
+enhanced_multi_asset_trades.json
+VibeCleanUp/
