@@ -16,6 +16,13 @@ class BybitClient:
         self.api_secret = os.getenv("BYBIT_API_SECRET", "")
         self.testnet = os.getenv("BYBIT_TESTNET", "false").lower() == "true"
         
+        # 지원되는 암호화폐 심볼 정의
+        self.supported_symbols = {
+            "BTC": "BTCUSDT",
+            "XRP": "XRPUSDT", 
+            "SOL": "SOLUSDT"
+        }
+        
         # 디버깅 정보 출력
         print(f"🔍 환경변수 디버깅:")
         print(f"   API_KEY 길이: {len(self.api_key)} ({'설정됨' if self.api_key else '비어있음'})")
@@ -44,7 +51,7 @@ class BybitClient:
             print(f"🔗 Bybit 클라이언트 초기화 완료 (공개 API만, 테스트넷: {self.testnet})")
     
     async def get_current_price(self, symbol: str = "BTCUSDT") -> float:
-        """현재 비트코인 가격 조회"""
+        """현재 암호화폐 가격 조회 (BTC, XRP, SOL 지원)"""
         try:
             response = self.session.get_tickers(category="spot", symbol=symbol)
             if response["retCode"] == 0:
@@ -52,8 +59,23 @@ class BybitClient:
                 return price
             return 0.0
         except Exception as e:
-            print(f"가격 조회 오류: {e}")
+            print(f"가격 조회 오류 ({symbol}): {e}")
             return 0.0
+    
+    async def get_multiple_prices(self, symbols: list = None) -> Dict[str, float]:
+        """여러 암호화폐 가격 동시 조회"""
+        if symbols is None:
+            symbols = list(self.supported_symbols.values())
+        
+        prices = {}
+        try:
+            for symbol in symbols:
+                price = await self.get_current_price(symbol)
+                prices[symbol] = price
+            return prices
+        except Exception as e:
+            print(f"다중 가격 조회 오류: {e}")
+            return {symbol: 0.0 for symbol in symbols}
     
     async def get_balance(self) -> Dict[str, Any]:
         """계정 잔고 조회"""
@@ -100,7 +122,7 @@ class BybitClient:
             return {}
     
     async def calculate_safe_order_size(self, symbol: str = "BTCUSDT", side: str = "Buy") -> Optional[str]:
-        """안전한 주문 크기 계산 (30달러 예산 기준)"""
+        """안전한 주문 크기 계산 (다중 암호화폐 지원)"""
         try:
             current_price = await self.get_current_price(symbol)
             if current_price <= 0:
@@ -120,28 +142,41 @@ class BybitClient:
                 
                 # 최대 포지션 비율 적용
                 max_buy_amount = available_amount * (self.max_position_percentage / 100)
-                btc_qty = max_buy_amount / current_price
+                crypto_qty = max_buy_amount / current_price
                 
                 # 최소 주문 크기 확인
                 if max_buy_amount < self.min_order_size:
                     print(f"❌ 주문 금액이 너무 작음: ${max_buy_amount:.2f}")
                     return None
                 
-                return f"{btc_qty:.6f}"
+                # 심볼별 정밀도 조정
+                precision = self._get_symbol_precision(symbol)
+                return f"{crypto_qty:.{precision}f}"
                 
             else:  # Sell
-                # 매도: BTC 잔고 기준으로 계산
-                btc_balance = balance.get("BTC", {}).get("available", 0)
-                if btc_balance <= 0:
-                    print("❌ 매도할 BTC가 없습니다")
+                # 매도: 해당 암호화폐 잔고 기준으로 계산
+                base_currency = symbol.replace("USDT", "")
+                crypto_balance = balance.get(base_currency, {}).get("available", 0)
+                if crypto_balance <= 0:
+                    print(f"❌ 매도할 {base_currency}가 없습니다")
                     return None
                 
-                # 전체 BTC 매도
-                return f"{btc_balance:.6f}"
+                # 전체 암호화폐 매도
+                precision = self._get_symbol_precision(symbol)
+                return f"{crypto_balance:.{precision}f}"
                 
         except Exception as e:
-            print(f"주문 크기 계산 오류: {e}")
+            print(f"주문 크기 계산 오류 ({symbol}): {e}")
             return None
+    
+    def _get_symbol_precision(self, symbol: str) -> int:
+        """심볼별 소수점 정밀도 반환"""
+        precision_map = {
+            "BTCUSDT": 6,
+            "XRPUSDT": 1,  # XRP는 소수점 1자리
+            "SOLUSDT": 3   # SOL은 소수점 3자리
+        }
+        return precision_map.get(symbol, 6)
 
     async def place_order(self, 
                          symbol: str = "BTCUSDT",
@@ -233,7 +268,7 @@ class BybitClient:
                            symbol: str = "BTCUSDT",
                            interval: str = "1",  # 1분봉
                            limit: int = 200) -> list:
-        """캔들스틱 데이터 조회"""
+        """캔들스틱 데이터 조회 (다중 암호화폐 지원)"""
         try:
             response = self.session.get_kline(
                 category="spot",
@@ -247,5 +282,20 @@ class BybitClient:
             return []
             
         except Exception as e:
-            print(f"캔들 데이터 조회 오류: {e}")
+            print(f"캔들 데이터 조회 오류 ({symbol}): {e}")
             return []
+    
+    async def get_multiple_kline_data(self, symbols: list = None, interval: str = "1", limit: int = 200) -> Dict[str, list]:
+        """여러 암호화폐의 캔들스틱 데이터 동시 조회"""
+        if symbols is None:
+            symbols = list(self.supported_symbols.values())
+        
+        kline_data = {}
+        try:
+            for symbol in symbols:
+                data = await self.get_kline_data(symbol, interval, limit)
+                kline_data[symbol] = data
+            return kline_data
+        except Exception as e:
+            print(f"다중 캔들 데이터 조회 오류: {e}")
+            return {symbol: [] for symbol in symbols}
