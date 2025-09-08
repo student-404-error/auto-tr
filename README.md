@@ -13,6 +13,9 @@
 │   ├── components/   # React 컴포넌트
 │   ├── pages/        # 페이지
 │   └── utils/        # 유틸리티
+├── scripts/          # 실행 및 설정 스크립트
+├── docs/             # 프로젝트 문서
+├── data/             # 데이터 파일
 └── docker-compose.yml # 배포용
 ```
 
@@ -43,6 +46,28 @@
    - 실시간 포트폴리오 현황
    - 거래 내역 및 수익률
    - 차트 및 분석 도구
+
+## 🚀 빠른 시작
+
+### 1. 초기 설정
+```bash
+# 프로젝트 의존성 설치
+bash scripts/setup.sh
+
+# Git 저장소 설정 (처음만)
+bash scripts/git-setup.sh
+```
+
+### 2. 개발 서버 실행
+```bash
+# 전체 시스템 시작
+bash scripts/start.sh
+```
+
+### 3. 접속
+- 🌐 프론트엔드: http://localhost:3000
+- 🔗 백엔드 API: http://localhost:8000
+- 📚 API 문서: http://localhost:8000/docs
 
 ## 🚨 실제 거래 설정 (30달러 예산)
 

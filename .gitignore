@@ -253,5 +253,10 @@ settings.local.json
 
 # etc
 .kiro/
-enhanced_multi_asset_trades.json
+
+# Data files (실제 거래 데이터는 민감정보이므로 제외)
+data/*.json
+!data/README.md
+
+# 이전 정리된 폴더들
 VibeCleanUp/
