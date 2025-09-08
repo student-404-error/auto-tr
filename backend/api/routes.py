@@ -2,12 +2,21 @@ from fastapi import APIRouter, HTTPException, Request
 import asyncio
 from models.portfolio_history import PortfolioHistory
 from models.trade_tracker import TradeTracker
+from models.multi_asset_portfolio import MultiAssetPortfolio
+from models.enhanced_trade import EnhancedTradeTracker
+from models.position_manager import PositionManager
 
 router = APIRouter()
 
 # 글로벌 인스턴스
 portfolio_history = PortfolioHistory()
 trade_tracker = TradeTracker()
+enhanced_trade_tracker = EnhancedTradeTracker()
+position_manager = PositionManager()
+multi_asset_portfolio = MultiAssetPortfolio(
+    trade_tracker=enhanced_trade_tracker,
+    position_manager=position_manager
+)
 
 
 def get_trading_client(request: Request):
@@ -248,5 +257,44 @@ async def create_test_signal(signal_type: str = "buy"):
         
         signal = trade_tracker.add_test_signal("BTCUSDT", signal_type)
         return {"message": f"{signal_type} 테스트 신호 생성됨", "signal": signal}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/portfolio/multi-asset")
+async def get_multi_asset_portfolio(request: Request):
+    """다중 자산 포트폴리오 현황 조회"""
+    trading_client = get_trading_client(request)
+    
+    try:
+        # Get current prices for all supported assets
+        current_prices = {}
+        for symbol in multi_asset_portfolio.SUPPORTED_ASSETS:
+            try:
+                price = await trading_client.get_current_price(symbol)
+                current_prices[symbol] = price
+            except Exception as e:
+                print(f"❌ {symbol} 가격 조회 실패: {e}")
+                current_prices[symbol] = 0.0
+        
+        # Get comprehensive portfolio data
+        portfolio_data = multi_asset_portfolio.get_portfolio_data(current_prices)
+        
+        # Add portfolio snapshot for history tracking
+        if portfolio_data["total_portfolio_value"] > 0:
+            multi_asset_portfolio.add_portfolio_snapshot(current_prices)
+        
+        return portfolio_data
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/portfolio/allocation")
+async def get_asset_allocation():
+    """자산 배분 현황 조회 (파이 차트용)"""
+    try:
+        allocation = multi_asset_portfolio.get_asset_allocation()
+        return {"allocation": allocation}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
