@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useTradingContext } from '@/contexts/TradingContext'
 import Header from './Header'
 import PortfolioCard from './PortfolioCard'
+import PortfolioPieChart from './PortfolioPieChart'
 import TradingControls from './TradingControls'
 import PriceChart from './PriceChart'
 import TradeHistory from './TradeHistory'
@@ -11,16 +12,26 @@ import StatusIndicator from './StatusIndicator'
 import PerformanceChart from './PerformanceChart'
 import TradingSignals from './TradingSignals'
 import PositionCard from './PositionCard'
+import { usePortfolio } from '@/hooks/usePortfolio'
 
 export default function Dashboard() {
   const { 
     portfolio, 
+    multiAssetPortfolio,
     tradingStatus, 
     currentPrice,
     fetchPortfolio,
+    fetchMultiAssetPortfolio,
     fetchTradingStatus,
     fetchCurrentPrice
   } = useTradingContext()
+
+  // Use the new portfolio hook for multi-asset data
+  const { 
+    portfolioData, 
+    isLoading: portfolioLoading, 
+    error: portfolioError 
+  } = usePortfolio(true, 30000)
 
   const [isLoading, setIsLoading] = useState(true)
 
@@ -29,6 +40,7 @@ export default function Dashboard() {
       try {
         await Promise.all([
           fetchPortfolio(),
+          fetchMultiAssetPortfolio(),
           fetchTradingStatus(),
           fetchCurrentPrice()
         ])
@@ -120,6 +132,18 @@ export default function Dashboard() {
               <TradingSignals />
             </div>
           </div>
+        </div>
+
+        {/* 포트폴리오 분산 차트 */}
+        <div className="mb-8">
+          <PortfolioPieChart 
+            portfolioData={portfolioData}
+            legacyPortfolio={portfolio}
+            onAssetClick={(symbol) => {
+              console.log('Asset clicked:', symbol)
+              // TODO: Navigate to asset detail view
+            }}
+          />
         </div>
 
         {/* 성과 차트 */}
