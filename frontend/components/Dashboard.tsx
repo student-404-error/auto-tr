@@ -14,8 +14,10 @@ import TradingSignals from './TradingSignals'
 import PositionCard from './PositionCard'
 import PositionManager from './PositionManager'
 import PositionPnLChart from './PositionPnLChart'
-import PriceDisplay from './PriceDisplay'
 import { usePortfolio } from '@/hooks/usePortfolio'
+import HoldingsPieCard from './HoldingsPieCard'
+import AssetChartCard from './AssetChartCard'
+import AssetPnlTable from './AssetPnlTable'
 
 export default function Dashboard() {
   const { 
@@ -137,16 +139,10 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* 포트폴리오 분산 차트 */}
-        <div className="mb-8">
-          <PortfolioPieChart 
-            portfolioData={portfolioData}
-            legacyPortfolio={portfolio}
-            onAssetClick={(symbol) => {
-              console.log('Asset clicked:', symbol)
-              // TODO: Navigate to asset detail view
-            }}
-          />
+        {/* 지갑 파이 + 보유 코인 차트 */}
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-8">
+          <HoldingsPieCard portfolioData={portfolioData} />
+          <AssetChartCard portfolioData={portfolioData} />
         </div>
 
         {/* 포지션 관리 */}
@@ -165,6 +161,11 @@ export default function Dashboard() {
             <h3 className="text-lg font-semibold mb-4">포트폴리오 성과</h3>
             <PerformanceChart />
           </div>
+        </div>
+
+        {/* 코인별 손익률 */}
+        <div className="mb-8">
+          <AssetPnlTable portfolioData={portfolioData} />
         </div>
 
         {/* 차트와 거래 내역 */}

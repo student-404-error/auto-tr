@@ -1,33 +1,30 @@
 import os
-from pybit.unified_trading import HTTP
-from typing import Dict, Any, Optional
+import logging
 import asyncio
-from datetime import datetime
+from typing import Dict, Any, Optional
+
+from pybit.unified_trading import HTTP
+from tenacity import AsyncRetrying, retry_if_exception_type, stop_after_attempt, wait_exponential
 from dotenv import load_dotenv
 
 # .env 파일 명시적 로드
 load_dotenv()
 
+logger = logging.getLogger(__name__)
+
 class BybitClient:
     def __init__(self):
         """Bybit API 클라이언트 초기화"""
-        # 환경변수 로딩 디버깅
         self.api_key = os.getenv("BYBIT_API_KEY", "")
         self.api_secret = os.getenv("BYBIT_API_SECRET", "")
         self.testnet = os.getenv("BYBIT_TESTNET", "false").lower() == "true"
-        
+
         # 지원되는 암호화폐 심볼 정의
         self.supported_symbols = {
             "BTC": "BTCUSDT",
             "XRP": "XRPUSDT", 
             "SOL": "SOLUSDT"
         }
-        
-        # 디버깅 정보 출력
-        print(f"🔍 환경변수 디버깅:")
-        print(f"   API_KEY 길이: {len(self.api_key)} ({'설정됨' if self.api_key else '비어있음'})")
-        print(f"   API_SECRET 길이: {len(self.api_secret)} ({'설정됨' if self.api_secret else '비어있음'})")
-        print(f"   TESTNET: {self.testnet}")
         
         # 안전 거래 설정
         self.max_trade_amount = float(os.getenv("MAX_TRADE_AMOUNT_USD", "30.0"))
@@ -43,23 +40,34 @@ class BybitClient:
                 api_secret=self.api_secret,
             )
             self.authenticated = True
-            print(f"🔗 Bybit 클라이언트 초기화 완료 (인증됨, 테스트넷: {self.testnet})")
+            logger.info("Bybit client initialized (auth on, testnet=%s)", self.testnet)
         else:
             # 공개 API만 사용 (가격 조회 등)
             self.session = HTTP(testnet=self.testnet)
             self.authenticated = False
-            print(f"🔗 Bybit 클라이언트 초기화 완료 (공개 API만, 테스트넷: {self.testnet})")
+            logger.info("Bybit client initialized (public only, testnet=%s)", self.testnet)
+
+    async def _call(self, fn, *args, **kwargs):
+        """Run blocking pybit call in a thread with retries/backoff."""
+        async for attempt in AsyncRetrying(
+            stop=stop_after_attempt(5),
+            wait=wait_exponential(multiplier=1, min=1, max=16),
+            retry=retry_if_exception_type(Exception),
+            reraise=True,
+        ):
+            with attempt:
+                return await asyncio.to_thread(fn, *args, **kwargs)
     
     async def get_current_price(self, symbol: str = "BTCUSDT") -> float:
         """현재 암호화폐 가격 조회 (BTC, XRP, SOL 지원)"""
         try:
-            response = self.session.get_tickers(category="spot", symbol=symbol)
+            response = await self._call(self.session.get_tickers, category="spot", symbol=symbol)
             if response["retCode"] == 0:
                 price = float(response["result"]["list"][0]["lastPrice"])
                 return price
             return 0.0
         except Exception as e:
-            print(f"가격 조회 오류 ({symbol}): {e}")
+            logger.warning("가격 조회 오류 (%s): %s", symbol, e)
             return 0.0
     
     async def get_multiple_prices(self, symbols: list = None) -> Dict[str, float]:
@@ -84,7 +92,7 @@ class BybitClient:
             return {}
         
         try:
-            response = self.session.get_wallet_balance(accountType="UNIFIED")
+            response = await self._call(self.session.get_wallet_balance, accountType="UNIFIED")
             
             if response["retCode"] == 0 and response["result"]["list"]:
                 balances = {}
@@ -112,13 +120,13 @@ class BybitClient:
                         print(f"❌ 코인 {coin_name} 잔고 파싱 오류: {e}")
                         continue
                         
-                print(f"💰 실제 잔고 조회 완료: {len(balances)}개 코인")
+                logger.info("실제 잔고 조회 완료: %s개 코인", len(balances))
                 return balances
             else:
-                print(f"❌ 잔고 조회 응답 오류: {response}")
+                logger.warning("잔고 조회 응답 오류: %s", response)
                 return {}
         except Exception as e:
-            print(f"❌ 잔고 조회 오류: {e}")
+            logger.warning("잔고 조회 오류: %s", e)
             return {}
     
     async def calculate_safe_order_size(self, symbol: str = "BTCUSDT", side: str = "Buy") -> Optional[str]:
@@ -166,7 +174,7 @@ class BybitClient:
                 return f"{crypto_balance:.{precision}f}"
                 
         except Exception as e:
-            print(f"주문 크기 계산 오류 ({symbol}): {e}")
+            logger.warning("주문 크기 계산 오류 (%s): %s", symbol, e)
             return None
     
     def _get_symbol_precision(self, symbol: str) -> int:
@@ -218,27 +226,28 @@ class BybitClient:
             
             print(f"🚀 실제 주문 실행: {side} {qty} {symbol} (${order_value:.2f})")
             
-            response = self.session.place_order(
+            response = await self._call(
+                self.session.place_order,
                 category="spot",
                 symbol=symbol,
                 side=side,
                 orderType=order_type,
-                qty=qty
+                qty=qty,
             )
             
             if response["retCode"] == 0:
-                print(f"✅ 주문 성공: {side} {qty} {symbol} (${order_value:.2f})")
+                logger.info("주문 성공: %s %s %s ($%.2f)", side, qty, symbol, order_value)
                 return {
                     "success": True,
                     "order_id": response["result"]["orderId"],
                     "data": response["result"]
                 }
             else:
-                print(f"❌ 주문 실패: {response['retMsg']}")
+                logger.warning("주문 실패: %s", response['retMsg'])
                 return {"success": False, "error": response["retMsg"]}
                 
         except Exception as e:
-            print(f"주문 실행 오류: {e}")
+            logger.error("주문 실행 오류: %s", e)
             return {"success": False, "error": str(e)}
     
     async def get_order_history(self, symbol: str = "BTCUSDT", limit: int = 50) -> list:
@@ -248,20 +257,21 @@ class BybitClient:
             return []
         
         try:
-            response = self.session.get_order_history(
+            response = await self._call(
+                self.session.get_order_history,
                 category="spot",
                 symbol=symbol,
-                limit=limit
+                limit=limit,
             )
             
             if response["retCode"] == 0:
                 return response["result"]["list"]
             else:
-                print(f"주문 내역 조회 응답 오류: {response}")
+                logger.warning("주문 내역 조회 응답 오류: %s", response)
                 return []
             
         except Exception as e:
-            print(f"주문 내역 조회 오류: {e}")
+            logger.warning("주문 내역 조회 오류: %s", e)
             return []
     
     async def get_kline_data(self, 
@@ -270,11 +280,12 @@ class BybitClient:
                            limit: int = 200) -> list:
         """캔들스틱 데이터 조회 (다중 암호화폐 지원)"""
         try:
-            response = self.session.get_kline(
+            response = await self._call(
+                self.session.get_kline,
                 category="spot",
                 symbol=symbol,
                 interval=interval,
-                limit=limit
+                limit=limit,
             )
             
             if response["retCode"] == 0:
@@ -282,7 +293,7 @@ class BybitClient:
             return []
             
         except Exception as e:
-            print(f"캔들 데이터 조회 오류 ({symbol}): {e}")
+            logger.warning("캔들 데이터 조회 오류 (%s): %s", symbol, e)
             return []
     
     async def get_multiple_kline_data(self, symbols: list = None, interval: str = "1", limit: int = 200) -> Dict[str, list]:

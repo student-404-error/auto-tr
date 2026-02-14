@@ -3,10 +3,10 @@ from datetime import datetime
 from typing import Dict, Any, Optional
 
 from .bybit_client import BybitClient
-from models.trade_tracker import TradeTracker
+from models.trade_tracker_db import TradeTrackerDB
 
 class TradingStrategy:
-    def __init__(self, client: BybitClient, trade_tracker: TradeTracker):
+    def __init__(self, client: BybitClient, trade_tracker: TradeTrackerDB):
         self.client = client
         self.trade_tracker = trade_tracker
         self.is_active = False
@@ -106,7 +106,7 @@ class TradingStrategy:
             
             # hold 신호의 경우 거래량을 0으로 설정
             if signal == 'hold':
-                self.trade_tracker.add_trade(
+                await self.trade_tracker.add_trade(
                     "BTCUSDT",
                     "Hold",  # 보류 상태
                     0.0,  # 거래량 0
@@ -136,7 +136,7 @@ class TradingStrategy:
                 if result.get("success"):
                     self.position = "long"
                     self.trade_amount = safe_qty  # 실제 거래된 수량 저장
-                    self.trade_tracker.add_trade(
+                    await self.trade_tracker.add_trade(
                         "BTCUSDT",
                         "Buy",
                         float(safe_qty),
@@ -158,7 +158,7 @@ class TradingStrategy:
                     self.position = None
                     # 실제 매도된 수량 사용
                     sold_qty = self.trade_amount if self.trade_amount else "0"
-                    self.trade_tracker.add_trade(
+                    await self.trade_tracker.add_trade(
                         "BTCUSDT",
                         "Sell",
                         float(sold_qty),
