@@ -14,7 +14,6 @@ import TradingSignals from './TradingSignals'
 import PositionCard from './PositionCard'
 import PositionManager from './PositionManager'
 import PositionPnLChart from './PositionPnLChart'
-import PriceDisplay from './PriceDisplay'
 import { usePortfolio } from '@/hooks/usePortfolio'
 
 export default function Dashboard() {
