@@ -11,6 +11,7 @@ import { usePortfolio } from '@/hooks/usePortfolio'
 import HoldingsPieCard from './HoldingsPieCard'
 import AssetChartCard from './AssetChartCard'
 import AssetPnlTable from './AssetPnlTable'
+import AutoTradeControls from './AutoTradeControls'
 
 export default function Dashboard() {
   const { 
@@ -55,10 +56,11 @@ export default function Dashboard() {
     const interval = setInterval(() => {
       fetchCurrentPrice()
       fetchPortfolio()
+      fetchTradingStatus()
     }, 30000)
 
     return () => clearInterval(interval)
-  }, [])
+  }, [fetchPortfolio, fetchMultiAssetPortfolio, fetchTradingStatus, fetchCurrentPrice])
 
   if (isLoading) {
     return (
@@ -73,7 +75,7 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-dark-bg">
-      <Header />
+      <Header tradingActive={tradingStatus?.is_active || false} />
       
       <div className="container mx-auto px-4 py-8">
         {/* 상단 요약 */}
@@ -97,6 +99,11 @@ export default function Dashboard() {
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-8">
           <HoldingsPieCard portfolioData={portfolioData} />
           <AssetChartCard portfolioData={portfolioData} />
+        </div>
+
+        {/* 자동매매 컨트롤 */}
+        <div className="mb-8">
+          <AutoTradeControls onStatusChanged={fetchTradingStatus} />
         </div>
 
         {/* 코인별 손익률 */}

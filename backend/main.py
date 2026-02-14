@@ -16,7 +16,9 @@ load_dotenv()
 
 from api.routes import router, trade_tracker, trade_tracker_db
 from trading.bybit_client import BybitClient
-from trading.simple_strategy import TradingStrategy
+from trading.simple_strategy import TradingStrategy as SimpleTradingStrategy
+from trading.regime_trend_strategy import RegimeTrendStrategy
+from trading.strategy_params import RegimeTrendParams
 from fastapi.responses import HTMLResponse
 
 app = FastAPI(title="Bitcoin Auto-Trading API", version="1.0.0")
@@ -38,12 +40,35 @@ async def startup_event():
     # Bybit 클라이언트 초기화
     app.state.trading_client = BybitClient()
     app.state.trade_tracker = trade_tracker_db
-    app.state.trading_strategy = TradingStrategy(
-        app.state.trading_client, trade_tracker_db
-    )
+    strategy_name = os.getenv("TRADING_STRATEGY", "regime_trend").lower()
+
+    if strategy_name == "simple":
+        app.state.trading_strategy = SimpleTradingStrategy(
+            app.state.trading_client, trade_tracker_db
+        )
+    else:
+        params = RegimeTrendParams(
+            symbol=os.getenv("STRATEGY_SYMBOL", "BTCUSDT"),
+            interval=os.getenv("STRATEGY_INTERVAL", "15"),
+            lookback_bars=int(os.getenv("STRATEGY_LOOKBACK_BARS", "260")),
+            ema_fast_period=int(os.getenv("STRATEGY_EMA_FAST", "50")),
+            ema_slow_period=int(os.getenv("STRATEGY_EMA_SLOW", "200")),
+            min_trend_gap_pct=float(os.getenv("STRATEGY_MIN_TREND_GAP_PCT", "0.001")),
+            atr_period=int(os.getenv("STRATEGY_ATR_PERIOD", "14")),
+            initial_stop_atr_mult=float(os.getenv("STRATEGY_INITIAL_STOP_ATR_MULT", "2.5")),
+            trailing_stop_atr_mult=float(os.getenv("STRATEGY_TRAILING_STOP_ATR_MULT", "3.0")),
+            loop_seconds=int(os.getenv("STRATEGY_LOOP_SECONDS", "60")),
+            cooldown_bars=int(os.getenv("STRATEGY_COOLDOWN_BARS", "2")),
+        )
+        app.state.trading_strategy = RegimeTrendStrategy(
+            app.state.trading_client,
+            trade_tracker_db,
+            params=params,
+        )
 
     logger.info("🚀 Bitcoin Auto-Trading System 시작됨")
     logger.info("📡 REST API 준비됨")
+    logger.info("🧠 Trading strategy selected: %s", strategy_name)
 
 
 @app.get("/")

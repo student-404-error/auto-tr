@@ -5,7 +5,11 @@ import { Bitcoin, Activity } from 'lucide-react'
 import NavigationPriceTicker from './NavigationPriceTicker'
 import FavoritesManager from './FavoritesManager'
 
-export default function Header() {
+interface HeaderProps {
+  tradingActive?: boolean
+}
+
+export default function Header({ tradingActive = false }: HeaderProps) {
   const [showFavoritesManager, setShowFavoritesManager] = useState(false)
 
   const handlePriceClick = (symbol: string) => {
@@ -42,6 +46,15 @@ export default function Header() {
               <div className="flex items-center space-x-2 text-crypto-green">
                 <Activity className="w-4 h-4" />
                 <span className="text-sm">실시간 연결됨</span>
+              </div>
+              <div
+                className={`text-xs px-2 py-1 rounded font-medium ${
+                  tradingActive
+                    ? 'bg-crypto-blue/20 text-crypto-blue'
+                    : 'bg-gray-700 text-gray-200'
+                }`}
+              >
+                {tradingActive ? 'RUNNING' : 'STOPPED'}
               </div>
             </div>
           </div>
