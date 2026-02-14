@@ -1,4 +1,5 @@
 import asyncio
+import os
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 
@@ -30,7 +31,13 @@ class TradeTrackerDB:
         self.db_path = db_path
         self._init_lock = asyncio.Lock()
 
+    def _ensure_db_dir(self):
+        db_dir = os.path.dirname(os.path.abspath(self.db_path))
+        if db_dir:
+            os.makedirs(db_dir, exist_ok=True)
+
     async def _init(self):
+        self._ensure_db_dir()
         async with self._init_lock:
             async with aiosqlite.connect(self.db_path) as db:
                 await db.executescript(SCHEMA)

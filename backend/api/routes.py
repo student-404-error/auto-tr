@@ -124,7 +124,8 @@ async def get_trade_history(limit: int = 50):
         trades = await trade_tracker_db.recent_trades(limit)
         return {"trades": trades}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        # 거래내역 조회 실패 시 대시보드가 죽지 않도록 빈 목록을 반환
+        return {"trades": [], "error": str(e)}
 
 
 @router.get("/price/{symbol}")

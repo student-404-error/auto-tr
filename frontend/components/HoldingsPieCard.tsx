@@ -3,14 +3,20 @@
 import { PortfolioData } from '@/services/portfolioService'
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts'
 
+type LegacyPortfolio = {
+  balances?: Record<string, { balance: number }>
+  current_btc_price?: number
+}
+
 interface Props {
   portfolioData: PortfolioData | null
+  legacyPortfolio?: LegacyPortfolio | null
 }
 
 const COLORS = ['#22d3ee', '#fbbf24', '#f97316', '#a855f7', '#34d399', '#ef4444', '#60a5fa']
 
-export default function HoldingsPieCard({ portfolioData }: Props) {
-  if (!portfolioData) {
+export default function HoldingsPieCard({ portfolioData, legacyPortfolio }: Props) {
+  if (!portfolioData && !legacyPortfolio) {
     return (
       <div className="card">
         <h3 className="text-lg font-semibold mb-3">지갑 구성</h3>
@@ -19,13 +25,28 @@ export default function HoldingsPieCard({ portfolioData }: Props) {
     )
   }
 
-  const data = Object.entries(portfolioData.assets)
-    .filter(([_, asset]) => asset.current_value > 0)
-    .map(([symbol, asset]) => ({
-      name: symbol.replace('USDT', ''),
-      value: asset.current_value,
-    }))
-    .sort((a, b) => b.value - a.value)
+  const data: { name: string; value: number }[] = []
+
+  if (portfolioData) {
+    Object.entries(portfolioData.assets)
+      .filter(([_, asset]) => asset.current_value > 0)
+      .forEach(([symbol, asset]) => {
+        data.push({ name: symbol.replace('USDT', ''), value: asset.current_value })
+      })
+  }
+
+  if (legacyPortfolio?.balances) {
+    const price = legacyPortfolio.current_btc_price || 0
+    Object.entries(legacyPortfolio.balances).forEach(([coin, info]) => {
+      if (info.balance <= 0) return
+      let value = 0
+      if (coin === 'USDT') value = info.balance
+      else if (coin === 'BTC') value = info.balance * price
+      if (value > 0) data.push({ name: coin, value })
+    })
+  }
+
+  data.sort((a, b) => b.value - a.value)
 
   if (data.length === 0) {
     return (

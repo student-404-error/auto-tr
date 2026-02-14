@@ -43,8 +43,12 @@ export default function StatusIndicator({
           ) : (
             <Pause className="w-4 h-4 text-gray-400" />
           )}
-          <span className={`text-sm ${tradingActive ? 'text-crypto-blue' : 'text-gray-400'}`}>
-            {tradingActive ? '자동매매 실행 중' : '자동매매 중지'}
+          <span
+            className={`text-sm font-medium ${
+              tradingActive ? 'text-crypto-blue' : 'text-gray-300'
+            }`}
+          >
+            {tradingActive ? '자동매매 실행 중' : '자동매매 중지됨'}
           </span>
         </div>
 
