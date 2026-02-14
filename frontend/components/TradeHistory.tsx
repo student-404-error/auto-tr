@@ -5,16 +5,21 @@ import { ArrowUpRight, ArrowDownRight, Clock } from 'lucide-react'
 import { tradingApi } from '@/utils/api'
 
 interface Trade {
+  id?: number | string
   orderId: string
+  order_id?: string
   symbol: string
   side: string
   orderType: string
   qty: string
+  quantity?: number
   price: string
   execTime: string
+  ts?: string
   execQty: string
   execPrice: string
   orderStatus: string
+  status?: string
 }
 
 export default function TradeHistory() {
@@ -40,8 +45,14 @@ export default function TradeHistory() {
     }
   }
 
-  const formatTime = (timestamp: string) => {
-    return new Date(parseInt(timestamp)).toLocaleString('ko-KR', {
+  const formatTime = (trade: Trade) => {
+    const raw = trade.execTime || trade.ts
+    if (!raw) return '-'
+    const date = /^\d+$/.test(String(raw))
+      ? new Date(parseInt(String(raw), 10))
+      : new Date(raw)
+    if (Number.isNaN(date.getTime())) return '-'
+    return date.toLocaleString('ko-KR', {
       month: 'short',
       day: 'numeric',
       hour: '2-digit',
@@ -132,22 +143,20 @@ export default function TradeHistory() {
                     {trade.symbol || 'BTCUSDT'}
                   </span>
                 </div>
-                <div className="text-sm text-gray-400">
-                  {formatTime(trade.execTime)}
-                </div>
+                <div className="text-sm text-gray-400">{formatTime(trade)}</div>
               </div>
             </div>
 
             {/* 거래 상세 */}
             <div className="text-right">
               <div className="font-medium">
-                {parseFloat(trade.execQty || trade.qty).toFixed(6)} BTC
+                {parseFloat(String(trade.execQty || trade.qty || trade.quantity || 0)).toFixed(6)} BTC
               </div>
               <div className="text-sm text-gray-400">
-                ${parseFloat(trade.execPrice || trade.price).toLocaleString()}
+                ${parseFloat(String(trade.execPrice || trade.price || 0)).toLocaleString()}
               </div>
-              <div className={`text-xs ${getStatusColor(trade.orderStatus)}`}>
-                {getStatusText(trade.orderStatus)}
+              <div className={`text-xs ${getStatusColor(trade.orderStatus || trade.status || '')}`}>
+                {getStatusText(trade.orderStatus || trade.status || 'New')}
               </div>
             </div>
           </div>

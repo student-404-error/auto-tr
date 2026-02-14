@@ -1,9 +1,11 @@
-from fastapi import APIRouter, HTTPException, Request
+import os
+import asyncio
+from fastapi import APIRouter, HTTPException, Request, Depends
 from pydantic import BaseModel
 from typing import Optional, Literal
-import asyncio
 from models.portfolio_history import PortfolioHistory
 from models.trade_tracker import TradeTracker
+from models.trade_tracker_db import TradeTrackerDB
 from models.multi_asset_portfolio import MultiAssetPortfolio
 from models.enhanced_trade import EnhancedTradeTracker
 from models.position_manager import PositionManager
@@ -11,9 +13,20 @@ from services.position_service import PositionService
 
 router = APIRouter()
 
+# 단순 헤더 기반 API 키 보호
+def require_api_key(request: Request):
+    api_key = os.getenv("ADMIN_API_KEY")
+    if not api_key:
+        raise HTTPException(status_code=500, detail="ADMIN_API_KEY 환경변수가 설정되지 않았습니다")
+    provided = request.headers.get("X-API-KEY")
+    if provided != api_key:
+        raise HTTPException(status_code=401, detail="Invalid API key")
+    return True
+
 # 글로벌 인스턴스
 portfolio_history = PortfolioHistory()
 trade_tracker = TradeTracker()
+trade_tracker_db = TradeTrackerDB()
 enhanced_trade_tracker = EnhancedTradeTracker()
 position_manager = PositionManager()
 position_service = PositionService(position_manager, enhanced_trade_tracker)
@@ -105,15 +118,14 @@ async def get_portfolio(request: Request):
 
 
 @router.get("/trades")
-async def get_trade_history(request: Request):
-    """거래 내역 조회"""
-    trading_client = get_trading_client(request)
-
+async def get_trade_history(limit: int = 50):
+    """거래 내역 조회 (로컬 DB)"""
     try:
-        trades = await trading_client.get_order_history()
+        trades = await trade_tracker_db.recent_trades(limit)
         return {"trades": trades}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        # 거래내역 조회 실패 시 대시보드가 죽지 않도록 빈 목록을 반환
+        return {"trades": [], "error": str(e)}
 
 
 @router.get("/price/{symbol}")
@@ -157,7 +169,7 @@ async def get_chart_data(
 
 
 @router.post("/trading/start")
-async def start_trading(request: Request):
+async def start_trading(request: Request, _auth=Depends(require_api_key)):
     """자동매매 시작"""
     trading_strategy = get_trading_strategy(request)
 
@@ -169,7 +181,7 @@ async def start_trading(request: Request):
 
 
 @router.post("/trading/stop")
-async def stop_trading(request: Request):
+async def stop_trading(request: Request, _auth=Depends(require_api_key)):
     """자동매매 중지"""
     trading_strategy = get_trading_strategy(request)
 
@@ -190,6 +202,7 @@ async def place_manual_order(
     symbol: str = "BTCUSDT",
     side: str = "Buy",
     qty: str = "0.001",
+    _auth=Depends(require_api_key),
 ):
     """수동 주문"""
     trading_client = get_trading_client(request)

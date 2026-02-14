@@ -34,6 +34,7 @@ uvicorn main:app --reload
 - `trading/bybit_client.py`: Bybit API 클라이언트
 - `trading/strategy.py`: 자동매매 전략 (고급)
 - `trading/simple_strategy.py`: 간단한 전략
+<<<<<<< HEAD
 - `api/routes.py`: REST API 엔드포인트
 
 ## 퀀트 시계열 적재 파이프라인 (SQLite)
@@ -58,4 +59,19 @@ QUANT_DB_PATH=./data/quant_timeseries.db
 DATA_PIPELINE_SYMBOLS=BTCUSDT,XRPUSDT,SOLUSDT
 DATA_PIPELINE_INTERVALS=1,5,15,60
 DATA_PIPELINE_SLEEP_SEC=60
+=======
+- `trading/regime_trend_strategy.py`: EMA 레짐 + ATR 리스크 전략 (기본)
+- `backtest/regime_trend_backtester.py`: 백테스트 인터페이스 구현체
+- `api/routes.py`: REST API 엔드포인트
+
+## 전략 선택 (환경변수)
+
+```env
+TRADING_STRATEGY=regime_trend   # simple | regime_trend
+STRATEGY_SYMBOL=BTCUSDT
+STRATEGY_INTERVAL=15
+STRATEGY_EMA_FAST=50
+STRATEGY_EMA_SLOW=200
+STRATEGY_ATR_PERIOD=14
+>>>>>>> 4aed3ac65f8f152f915ae2ca9a83ee46a9339ac4
 ```
