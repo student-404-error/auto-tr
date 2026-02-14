@@ -74,6 +74,16 @@ export const tradingApi = {
     return response.data
   },
 
+  // 달러 기반 주문
+  placeOrderByDollar: async (symbol: string, side: string, dollarAmount: string) => {
+    const response = await api.post('/api/order/dollar', {
+      symbol,
+      side,
+      dollarAmount
+    })
+    return response.data
+  },
+
   // 시스템 상태 조회
   getSystemStatus: async () => {
     const response = await api.get('/api/status')
@@ -125,6 +135,97 @@ export const tradingApi = {
   // 자산 배분 현황 조회
   getAssetAllocation: async () => {
     const response = await api.get('/api/portfolio/allocation')
+    return response.data
+  },
+
+  // 거래 마커 조회 (차트용)
+  getTradeMarkers: async (symbol: string = 'BTCUSDT') => {
+    const response = await api.get(`/api/trades/markers/${symbol}`)
+    return response.data
+  },
+
+  // 현재 가격 조회
+  getCurrentPrice: async (symbol: string = 'BTCUSDT') => {
+    const response = await api.get(`/api/price/${symbol}`)
+    return response.data
+  },
+
+  // Position Management API
+  
+  // 포지션 열기
+  openPosition: async (
+    symbol: string, 
+    position_type: 'long' | 'short', 
+    entry_price: number, 
+    quantity: number, 
+    dollar_amount: number
+  ) => {
+    const response = await api.post('/api/positions/open', {
+      symbol,
+      position_type,
+      entry_price,
+      quantity,
+      dollar_amount
+    })
+    return response.data
+  },
+
+  // 포지션 닫기
+  closePosition: async (position_id: string, close_price?: number) => {
+    const response = await api.post('/api/positions/close', {
+      position_id,
+      close_price
+    })
+    return response.data
+  },
+
+  // 열린 포지션 조회
+  getOpenPositions: async (symbol?: string) => {
+    const params = symbol ? { symbol } : {}
+    const response = await api.get('/api/positions/open', { params })
+    return response.data
+  },
+
+  // 닫힌 포지션 조회
+  getClosedPositions: async (symbol?: string, limit: number = 50) => {
+    const params = { limit, ...(symbol ? { symbol } : {}) }
+    const response = await api.get('/api/positions/closed', { params })
+    return response.data
+  },
+
+  // 포지션 요약 및 통계
+  getPositionsSummary: async (symbol?: string) => {
+    const params = symbol ? { symbol } : {}
+    const response = await api.get('/api/positions/summary', { params })
+    return response.data
+  },
+
+  // 포지션 상세 조회
+  getPositionDetails: async (position_id: string) => {
+    const response = await api.get(`/api/positions/${position_id}`)
+    return response.data
+  },
+
+  // 포지션 가격 업데이트
+  updatePositionPrices: async () => {
+    const response = await api.post('/api/positions/update-prices')
+    return response.data
+  },
+
+  // 자동 포지션 종료
+  autoClosePositions: async (
+    symbol?: string,
+    max_loss_percent?: number,
+    min_profit_percent?: number,
+    max_days_open?: number
+  ) => {
+    const params = {
+      ...(symbol ? { symbol } : {}),
+      ...(max_loss_percent !== undefined ? { max_loss_percent } : {}),
+      ...(min_profit_percent !== undefined ? { min_profit_percent } : {}),
+      ...(max_days_open !== undefined ? { max_days_open } : {})
+    }
+    const response = await api.post('/api/positions/auto-close', null, { params })
     return response.data
   }
 }

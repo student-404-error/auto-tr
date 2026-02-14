@@ -1,10 +1,13 @@
 from fastapi import APIRouter, HTTPException, Request
+from pydantic import BaseModel
+from typing import Optional, Literal
 import asyncio
 from models.portfolio_history import PortfolioHistory
 from models.trade_tracker import TradeTracker
 from models.multi_asset_portfolio import MultiAssetPortfolio
 from models.enhanced_trade import EnhancedTradeTracker
 from models.position_manager import PositionManager
+from services.position_service import PositionService
 
 router = APIRouter()
 
@@ -13,10 +16,23 @@ portfolio_history = PortfolioHistory()
 trade_tracker = TradeTracker()
 enhanced_trade_tracker = EnhancedTradeTracker()
 position_manager = PositionManager()
+position_service = PositionService(position_manager, enhanced_trade_tracker)
 multi_asset_portfolio = MultiAssetPortfolio(
     trade_tracker=enhanced_trade_tracker,
     position_manager=position_manager
 )
+
+# Pydantic models for request bodies
+class OpenPositionRequest(BaseModel):
+    symbol: str
+    position_type: Literal['long', 'short']
+    entry_price: float
+    quantity: float
+    dollar_amount: float
+
+class ClosePositionRequest(BaseModel):
+    position_id: str
+    close_price: Optional[float] = None
 
 
 def get_trading_client(request: Request):
@@ -296,5 +312,192 @@ async def get_asset_allocation():
     try:
         allocation = multi_asset_portfolio.get_asset_allocation()
         return {"allocation": allocation}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/trades/markers/{symbol}")
+async def get_trade_markers(symbol: str = "BTCUSDT"):
+    """특정 심볼의 거래 마커 데이터 조회 (차트용)"""
+    try:
+        # Get trades from enhanced trade tracker
+        symbol_trades = enhanced_trade_tracker.get_trades_by_symbol(symbol)
+        
+        # Convert trades to chart marker format
+        markers = []
+        for trade in symbol_trades:
+            if trade.status == 'filled':  # Only show filled trades
+                markers.append({
+                    "id": trade.id,
+                    "timestamp": trade.timestamp,
+                    "price": trade.price,
+                    "type": f"{trade.side}_{trade.position_type}",  # e.g., "buy_long", "sell_short"
+                    "side": trade.side,
+                    "position_type": trade.position_type,
+                    "quantity": trade.quantity,
+                    "dollar_amount": trade.dollar_amount,
+                    "signal": trade.signal,
+                    "fees": trade.fees
+                })
+        
+        # Sort by timestamp
+        markers.sort(key=lambda x: x["timestamp"])
+        
+        return {"symbol": symbol, "markers": markers}
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# Position Management Endpoints
+
+@router.post("/positions/open")
+async def open_position(request: Request, position_request: OpenPositionRequest):
+    """새 포지션 열기"""
+    try:
+        trading_client = get_trading_client(request)
+        
+        result = await position_service.open_position(
+            symbol=position_request.symbol,
+            position_type=position_request.position_type,
+            entry_price=position_request.entry_price,
+            quantity=position_request.quantity,
+            dollar_amount=position_request.dollar_amount,
+            trading_client=trading_client
+        )
+        
+        return result
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/positions/close")
+async def close_position(request: Request, close_request: ClosePositionRequest):
+    """포지션 닫기"""
+    try:
+        trading_client = get_trading_client(request)
+        
+        result = await position_service.close_position(
+            position_id=close_request.position_id,
+            close_price=close_request.close_price,
+            trading_client=trading_client
+        )
+        
+        return result
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/positions/open")
+async def get_open_positions(symbol: Optional[str] = None):
+    """열린 포지션 조회"""
+    try:
+        positions = position_service.get_open_positions(symbol)
+        return {"positions": positions, "count": len(positions)}
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/positions/closed")
+async def get_closed_positions(symbol: Optional[str] = None, limit: int = 50):
+    """닫힌 포지션 조회"""
+    try:
+        positions = position_service.get_closed_positions(symbol, limit)
+        return {"positions": positions, "count": len(positions)}
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/positions/summary")
+async def get_positions_summary(symbol: Optional[str] = None):
+    """포지션 요약 및 통계"""
+    try:
+        summary = position_service.get_position_summary(symbol)
+        return summary
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/positions/{position_id}")
+async def get_position_details(position_id: str):
+    """특정 포지션 상세 정보"""
+    try:
+        position = position_service.get_position_by_id(position_id)
+        if not position:
+            raise HTTPException(status_code=404, detail="Position not found")
+        
+        return {"position": position}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/positions/update-prices")
+async def update_position_prices(request: Request):
+    """포지션 가격 업데이트 (실시간 가격 반영)"""
+    try:
+        trading_client = get_trading_client(request)
+        
+        # Get current prices for all symbols with open positions
+        open_positions = position_service.get_open_positions()
+        symbols = list(set([pos["symbol"] for pos in open_positions]))
+        
+        price_updates = {}
+        for symbol in symbols:
+            try:
+                current_price = await trading_client.get_current_price(symbol)
+                price_updates[symbol] = current_price
+            except Exception as e:
+                print(f"❌ Failed to get price for {symbol}: {e}")
+        
+        # Update position prices
+        await position_service.update_position_prices(price_updates)
+        
+        return {
+            "success": True,
+            "updated_symbols": list(price_updates.keys()),
+            "price_updates": price_updates
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/positions/auto-close")
+async def auto_close_positions(
+    request: Request,
+    symbol: Optional[str] = None,
+    max_loss_percent: Optional[float] = None,
+    min_profit_percent: Optional[float] = None,
+    max_days_open: Optional[int] = None
+):
+    """조건에 따른 자동 포지션 종료"""
+    try:
+        trading_client = get_trading_client(request)
+        
+        # Update prices first
+        await update_position_prices(request)
+        
+        # Auto-close positions based on criteria
+        results = await position_service.auto_close_positions_by_criteria(
+            symbol=symbol,
+            max_loss_percent=max_loss_percent,
+            min_profit_percent=min_profit_percent,
+            max_days_open=max_days_open
+        )
+        
+        return {
+            "success": True,
+            "closed_positions": len(results),
+            "results": results
+        }
+        
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

@@ -1,12 +1,15 @@
-from fastapi import FastAPI, WebSocket
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-import asyncio
-import json
 import os
 from datetime import datetime
 from typing import Dict, Any
 from dotenv import load_dotenv
+import logging
+
+# 로깅 설정
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # .env 파일 로드
 load_dotenv()
@@ -20,13 +23,11 @@ app = FastAPI(title="Bitcoin Auto-Trading API", version="1.0.0")
 # CORS 설정
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # Next.js 개발 서버
+    allow_origins=["http://localhost:3000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-active_connections: list[WebSocket] = []
 
 
 @app.on_event("startup")
@@ -40,7 +41,8 @@ async def startup_event():
         app.state.trading_client, trade_tracker
     )
 
-    print("🚀 Bitcoin Auto-Trading System 시작됨")
+    logger.info("🚀 Bitcoin Auto-Trading System 시작됨")
+    logger.info("📡 REST API 준비됨")
 
 
 @app.get("/")
@@ -57,29 +59,6 @@ async def get_status():
         "timestamp": datetime.now().isoformat(),
         "trading_active": trading_strategy.is_active if trading_strategy else False,
     }
-
-
-@app.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket):
-    """실시간 데이터 WebSocket"""
-    await websocket.accept()
-    active_connections.append(websocket)
-
-    try:
-        while True:
-            trading_client = getattr(app.state, "trading_client", None)
-            data = {
-                "timestamp": datetime.now().isoformat(),
-                "price": await trading_client.get_current_price() if trading_client else 0,
-                "balance": await trading_client.get_balance() if trading_client else {},
-            }
-            await websocket.send_text(json.dumps(data))
-            await asyncio.sleep(1)  # 1초마다 업데이트
-
-    except Exception as e:
-        print(f"WebSocket 연결 오류: {e}")
-    finally:
-        active_connections.remove(websocket)
 
 
 # API 라우터 포함

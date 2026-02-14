@@ -6,12 +6,15 @@ import Header from './Header'
 import PortfolioCard from './PortfolioCard'
 import PortfolioPieChart from './PortfolioPieChart'
 import TradingControls from './TradingControls'
-import PriceChart from './PriceChart'
+import EnhancedPriceChart from './EnhancedPriceChart'
 import TradeHistory from './TradeHistory'
 import StatusIndicator from './StatusIndicator'
 import PerformanceChart from './PerformanceChart'
 import TradingSignals from './TradingSignals'
 import PositionCard from './PositionCard'
+import PositionManager from './PositionManager'
+import PositionPnLChart from './PositionPnLChart'
+import PriceDisplay from './PriceDisplay'
 import { usePortfolio } from '@/hooks/usePortfolio'
 
 export default function Dashboard() {
@@ -146,6 +149,16 @@ export default function Dashboard() {
           />
         </div>
 
+        {/* 포지션 관리 */}
+        <div className="mb-8">
+          <PositionManager />
+        </div>
+
+        {/* 포지션 P&L 시각화 */}
+        <div className="mb-8">
+          <PositionPnLChart />
+        </div>
+
         {/* 성과 차트 */}
         <div className="mb-8">
           <div className="card">
@@ -158,7 +171,7 @@ export default function Dashboard() {
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
           <div className="card">
             <h3 className="text-lg font-semibold mb-4">가격 차트</h3>
-            <PriceChart />
+            <EnhancedPriceChart symbol="BTCUSDT" showMarkers={true} />
           </div>
           
           <div className="card">

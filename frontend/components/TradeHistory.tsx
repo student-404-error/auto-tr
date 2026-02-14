@@ -133,7 +133,7 @@ export default function TradeHistory() {
                   </span>
                 </div>
                 <div className="text-sm text-gray-400">
-                  {formatTime(trade.execTime || trade.createdTime)}
+                  {formatTime(trade.execTime)}
                 </div>
               </div>
             </div>

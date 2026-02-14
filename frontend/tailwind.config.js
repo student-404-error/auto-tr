@@ -11,6 +11,7 @@ module.exports = {
         'crypto-green': '#00D4AA',
         'crypto-red': '#FF6B6B',
         'crypto-blue': '#4ECDC4',
+        'crypto-gold': '#FFD700',
         'dark-bg': '#0F172A',
         'dark-card': '#1E293B',
         // Default border color used by `@apply border-border` in globals.css
