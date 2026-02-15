@@ -104,7 +104,7 @@ export function FavoritesProvider({ children }: { children: ReactNode }) {
 
   const fetchPriceForSymbol = async (crypto: CryptoCurrency): Promise<PriceData | null> => {
     try {
-      const response = await fetch(`http://localhost:8000/api/price/${crypto.tradingPair}`)
+      const response = await fetch(`https://api.dataquantlab.com/api/price/${crypto.tradingPair}`)
       
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`)

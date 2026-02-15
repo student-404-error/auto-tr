@@ -8,7 +8,7 @@ interface Props {
 }
 
 const DEFAULT_ENDPOINT = '/api/trading'
-const DEFAULT_API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+const DEFAULT_API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.dataquantlab.com'
 
 export default function AutoTradeControls({
   apiBase = DEFAULT_API_BASE,

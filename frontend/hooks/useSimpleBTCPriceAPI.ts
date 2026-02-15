@@ -14,7 +14,7 @@ export function useSimpleBTCPriceAPI() {
   const fetchPrice = async () => {
     try {
       setError(null)
-      const response = await fetch('http://localhost:8000/api/price/BTCUSDT')
+      const response = await fetch('https://api.dataquantlab.com/api/price/BTCUSDT')
       
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`)

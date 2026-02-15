@@ -78,12 +78,7 @@ class PortfolioService {
     }
 
     try {
-      const response = await fetch('/api/portfolio/multi-asset')
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
-      }
-      
-      const data: PortfolioData = await response.json()
+      const data: PortfolioData = await tradingApi.getMultiAssetPortfolio()
       this.setCachedData(cacheKey, data)
       return data
     } catch (error) {
@@ -104,12 +99,7 @@ class PortfolioService {
     }
 
     try {
-      const response = await fetch('/api/portfolio/allocation')
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
-      }
-      
-      const data = await response.json()
+      const data = await tradingApi.getAssetAllocation()
       this.setCachedData(cacheKey, data)
       return data.allocation
     } catch (error) {
@@ -210,12 +200,7 @@ class PortfolioService {
    */
   async getPortfolioPerformance(): Promise<PortfolioPerformance> {
     try {
-      const response = await fetch('/api/portfolio/performance')
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
-      }
-      
-      return await response.json()
+      return await tradingApi.getPortfolioPerformance()
     } catch (error) {
       console.error('Failed to fetch portfolio performance:', error)
       // Return default values on error
