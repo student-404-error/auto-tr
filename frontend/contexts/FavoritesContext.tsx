@@ -1,6 +1,7 @@
 'use client'
 
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react'
+import { tradingApi } from '@/utils/api'
 
 export interface CryptoCurrency {
   symbol: string
@@ -104,13 +105,7 @@ export function FavoritesProvider({ children }: { children: ReactNode }) {
 
   const fetchPriceForSymbol = async (crypto: CryptoCurrency): Promise<PriceData | null> => {
     try {
-      const response = await fetch(`https://api.dataquantlab.com/api/price/${crypto.tradingPair}`)
-      
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
-      }
-      
-      const data = await response.json()
+      const data = await tradingApi.getPrice(crypto.tradingPair)
       
       return {
         price: data.price || 0,
@@ -184,7 +179,7 @@ export function FavoritesProvider({ children }: { children: ReactNode }) {
     })
   }, [favorites])
 
-  // Auto-refresh prices every 5 seconds
+  // Auto-refresh prices every 15 seconds
   useEffect(() => {
     if (favorites.length === 0) return
 
@@ -192,7 +187,7 @@ export function FavoritesProvider({ children }: { children: ReactNode }) {
     refreshPrices()
 
     // Set up interval for auto-refresh
-    const interval = setInterval(refreshPrices, 5000)
+    const interval = setInterval(refreshPrices, 15000)
 
     return () => clearInterval(interval)
   }, [favorites, refreshPrices])
