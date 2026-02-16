@@ -42,8 +42,7 @@ class PositionService:
         """
         try:
             # Record the entry trade
-            entry_trade = await asyncio.to_thread(
-                self.trade_tracker.add_trade,
+            entry_trade = self.trade_tracker.add_trade(
                 symbol=symbol,
                 side='buy' if position_type == 'long' else 'sell',
                 position_type=position_type,
@@ -51,19 +50,18 @@ class PositionService:
                 price=entry_price,
                 dollar_amount=dollar_amount,
                 signal='position_open',
-                status='filled',
+                status='filled'
             )
             
             # Create the position
-            position = await asyncio.to_thread(
-                self.position_manager.open_position,
+            position = self.position_manager.open_position(
                 symbol=symbol,
                 position_type=position_type,
                 entry_price=entry_price,
                 quantity=quantity,
                 dollar_amount=dollar_amount,
                 current_price=entry_price,
-                entry_trade_id=entry_trade.id,
+                entry_trade_id=entry_trade.id
             )
             
             logger.info(f"Position opened: {symbol} {position_type} - ID: {position.id}")
@@ -129,8 +127,7 @@ class PositionService:
             final_pnl_percent = position.unrealized_pnl_percent
             
             # Record the exit trade
-            exit_trade = await asyncio.to_thread(
-                self.trade_tracker.add_trade,
+            exit_trade = self.trade_tracker.add_trade(
                 symbol=position.symbol,
                 side='sell' if position.position_type == 'long' else 'buy',
                 position_type=position.position_type,
@@ -138,13 +135,11 @@ class PositionService:
                 price=close_price,
                 dollar_amount=position.quantity * close_price,
                 signal='position_close',
-                status='filled',
+                status='filled'
             )
             
             # Close the position
-            closed_position = await asyncio.to_thread(
-                self.position_manager.close_position, position_id, exit_trade.id
-            )
+            closed_position = self.position_manager.close_position(position_id, exit_trade.id)
             
             logger.info(f"Position closed: {position.symbol} {position.position_type} - P&L: ${final_pnl:.2f}")
             
@@ -176,7 +171,7 @@ class PositionService:
             self.current_prices.update(price_updates)
             
             for symbol, price in price_updates.items():
-                await asyncio.to_thread(self.position_manager.update_positions_price, symbol, price)
+                self.position_manager.update_positions_price(symbol, price)
             
             logger.debug(f"Updated prices for {len(price_updates)} symbols")
             

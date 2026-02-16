@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react'
-import { tradingApi } from '@/utils/api'
 
 interface BTCPriceData {
   price: number
@@ -15,7 +14,13 @@ export function useSimpleBTCPriceAPI() {
   const fetchPrice = async () => {
     try {
       setError(null)
-      const data = await tradingApi.getPrice('BTCUSDT')
+      const response = await fetch('https://api.dataquantlab.com/api/price/BTCUSDT')
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+      
+      const data = await response.json()
       
       setPriceData({
         price: data.price || 0,
@@ -36,11 +41,11 @@ export function useSimpleBTCPriceAPI() {
     fetchPrice()
   }, [])
 
-  // 15초마다 가격 업데이트
+  // 5초마다 가격 업데이트
   useEffect(() => {
     const interval = setInterval(() => {
       fetchPrice()
-    }, 15000)
+    }, 5000)
 
     return () => clearInterval(interval)
   }, [])

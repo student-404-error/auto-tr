@@ -1,11 +1,10 @@
 import os
 import asyncio
-import logging
-from datetime import datetime
 from fastapi import APIRouter, HTTPException, Request, Depends
 from pydantic import BaseModel
 from typing import Optional, Literal
 from models.portfolio_history import PortfolioHistory
+from models.trade_tracker import TradeTracker
 from models.trade_tracker_db import TradeTrackerDB
 from models.multi_asset_portfolio import MultiAssetPortfolio
 from models.enhanced_trade import EnhancedTradeTracker
@@ -13,7 +12,6 @@ from models.position_manager import PositionManager
 from services.position_service import PositionService
 
 router = APIRouter()
-logger = logging.getLogger(__name__)
 
 # 단순 헤더 기반 API 키 보호
 def require_api_key(request: Request):
@@ -27,6 +25,7 @@ def require_api_key(request: Request):
 
 # 글로벌 인스턴스
 portfolio_history = PortfolioHistory()
+trade_tracker = TradeTracker()
 trade_tracker_db = TradeTrackerDB()
 enhanced_trade_tracker = EnhancedTradeTracker()
 position_manager = PositionManager()
@@ -78,7 +77,7 @@ async def get_portfolio(request: Request):
                 "balances": {},
                 "current_btc_price": current_price,
                 "total_value_usd": 0,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": asyncio.get_event_loop().time(),
                 "error": "API 키가 설정되지 않았습니다. 실제 잔고를 조회할 수 없습니다.",
                 "live_trading": True,
                 "authenticated": trading_client.authenticated
@@ -95,7 +94,7 @@ async def get_portfolio(request: Request):
             "balances": balance,
             "current_btc_price": current_price,
             "total_value_usd": total_usd,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": asyncio.get_event_loop().time(),
             "live_trading": True,
             "authenticated": trading_client.authenticated,
             "max_trade_amount": trading_client.max_trade_amount
@@ -110,7 +109,7 @@ async def get_portfolio(request: Request):
         portfolio_data.update(performance_stats)
         
         # BTC 포지션 정보 추가
-        btc_pnl = await trade_tracker_db.get_pnl("BTCUSDT", current_price)
+        btc_pnl = trade_tracker.get_pnl("BTCUSDT", current_price)
         portfolio_data["btc_position"] = btc_pnl
         
         return portfolio_data
@@ -212,7 +211,7 @@ async def place_manual_order(
         result = await trading_client.place_order(symbol, side, "Market", qty)
         if result.get("success"):
             current_price = await trading_client.get_current_price(symbol)
-            await trade_tracker_db.add_trade(
+            trade_tracker.add_trade(
                 symbol,
                 side,
                 float(qty),
@@ -248,7 +247,7 @@ async def get_portfolio_performance():
 async def get_positions():
     """현재 포지션 조회"""
     try:
-        positions = await trade_tracker_db.get_current_positions()
+        positions = trade_tracker.get_current_positions()
         return {"positions": positions}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -258,7 +257,7 @@ async def get_positions():
 async def get_recent_signals(limit: int = 5):
     """최근 거래 신호 조회 (기본 5개)"""
     try:
-        signals = await trade_tracker_db.get_trade_signals(limit)
+        signals = trade_tracker.get_trade_signals(limit)
         return {"signals": signals}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -271,8 +270,22 @@ async def get_pnl(request: Request, symbol: str = "BTCUSDT"):
     
     try:
         current_price = await trading_client.get_current_price(symbol)
-        pnl_data = await trade_tracker_db.get_pnl(symbol, current_price)
+        pnl_data = trade_tracker.get_pnl(symbol, current_price)
         return pnl_data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/signals/test")
+async def create_test_signal(signal_type: str = "buy"):
+    """테스트 신호 생성 (개발용)"""
+    try:
+        # buy, sell, hold 신호 지원
+        if signal_type not in ["buy", "sell", "hold"]:
+            raise HTTPException(status_code=400, detail="signal_type은 buy, sell, hold 중 하나여야 합니다")
+        
+        signal = trade_tracker.add_test_signal("BTCUSDT", signal_type)
+        return {"message": f"{signal_type} 테스트 신호 생성됨", "signal": signal}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -290,7 +303,7 @@ async def get_multi_asset_portfolio(request: Request):
                 price = await trading_client.get_current_price(symbol)
                 current_prices[symbol] = price
             except Exception as e:
-                logger.warning("가격 조회 실패 (%s): %s", symbol, e)
+                print(f"❌ {symbol} 가격 조회 실패: {e}")
                 current_prices[symbol] = 0.0
         
         # Get comprehensive portfolio data
@@ -352,11 +365,7 @@ async def get_trade_markers(symbol: str = "BTCUSDT"):
 # Position Management Endpoints
 
 @router.post("/positions/open")
-async def open_position(
-    request: Request,
-    position_request: OpenPositionRequest,
-    _auth=Depends(require_api_key),
-):
+async def open_position(request: Request, position_request: OpenPositionRequest):
     """새 포지션 열기"""
     try:
         trading_client = get_trading_client(request)
@@ -377,11 +386,7 @@ async def open_position(
 
 
 @router.post("/positions/close")
-async def close_position(
-    request: Request,
-    close_request: ClosePositionRequest,
-    _auth=Depends(require_api_key),
-):
+async def close_position(request: Request, close_request: ClosePositionRequest):
     """포지션 닫기"""
     try:
         trading_client = get_trading_client(request)
@@ -448,7 +453,7 @@ async def get_position_details(position_id: str):
 
 
 @router.post("/positions/update-prices")
-async def update_position_prices(request: Request, _auth=Depends(require_api_key)):
+async def update_position_prices(request: Request):
     """포지션 가격 업데이트 (실시간 가격 반영)"""
     try:
         trading_client = get_trading_client(request)
@@ -463,7 +468,7 @@ async def update_position_prices(request: Request, _auth=Depends(require_api_key
                 current_price = await trading_client.get_current_price(symbol)
                 price_updates[symbol] = current_price
             except Exception as e:
-                logger.warning("Failed to get price for %s: %s", symbol, e)
+                print(f"❌ Failed to get price for {symbol}: {e}")
         
         # Update position prices
         await position_service.update_position_prices(price_updates)
@@ -481,7 +486,6 @@ async def update_position_prices(request: Request, _auth=Depends(require_api_key
 @router.post("/positions/auto-close")
 async def auto_close_positions(
     request: Request,
-    _auth=Depends(require_api_key),
     symbol: Optional[str] = None,
     max_loss_percent: Optional[float] = None,
     min_profit_percent: Optional[float] = None,
@@ -492,16 +496,7 @@ async def auto_close_positions(
         trading_client = get_trading_client(request)
         
         # Update prices first
-        open_positions = position_service.get_open_positions(symbol)
-        symbols = list(set([pos["symbol"] for pos in open_positions]))
-        price_updates = {}
-        for item_symbol in symbols:
-            try:
-                current_price = await trading_client.get_current_price(item_symbol)
-                price_updates[item_symbol] = current_price
-            except Exception as e:
-                logger.warning("Failed to get price for %s: %s", item_symbol, e)
-        await position_service.update_position_prices(price_updates)
+        await update_position_prices(request)
         
         # Auto-close positions based on criteria
         results = await position_service.auto_close_positions_by_criteria(
