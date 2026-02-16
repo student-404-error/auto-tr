@@ -16,21 +16,14 @@ import AutoTradeControls from './AutoTradeControls'
 export default function Dashboard() {
   const { 
     portfolio, 
-    multiAssetPortfolio,
     tradingStatus, 
     currentPrice,
     fetchPortfolio,
-    fetchMultiAssetPortfolio,
-    fetchTradingStatus,
-    fetchCurrentPrice
+    fetchTradingStatus
   } = useTradingContext()
 
   // Use the new portfolio hook for multi-asset data
-  const { 
-    portfolioData, 
-    isLoading: portfolioLoading, 
-    error: portfolioError 
-  } = usePortfolio(true, 30000)
+  const { portfolioData } = usePortfolio(true, 30000)
 
   const [isLoading, setIsLoading] = useState(true)
 
@@ -39,9 +32,7 @@ export default function Dashboard() {
       try {
         await Promise.all([
           fetchPortfolio(),
-          fetchMultiAssetPortfolio(),
-          fetchTradingStatus(),
-          fetchCurrentPrice()
+          fetchTradingStatus()
         ])
       } catch (error) {
         console.error('대시보드 초기화 오류:', error)
@@ -54,13 +45,11 @@ export default function Dashboard() {
 
     // 실시간 업데이트 (30초마다)
     const interval = setInterval(() => {
-      fetchCurrentPrice()
-      fetchPortfolio()
       fetchTradingStatus()
     }, 30000)
 
     return () => clearInterval(interval)
-  }, [fetchPortfolio, fetchMultiAssetPortfolio, fetchTradingStatus, fetchCurrentPrice])
+  }, [fetchPortfolio, fetchTradingStatus])
 
   if (isLoading) {
     return (

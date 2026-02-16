@@ -57,19 +57,19 @@ export function usePortfolio(autoRefresh: boolean = true, refreshInterval: numbe
     try {
       // Fetch current prices for all supported assets
       const currentPrices: Record<string, number> = {}
-      
-      for (const symbol of portfolioData.supported_assets) {
-        try {
-          const priceData = await tradingApi.getPrice(symbol)
-          currentPrices[symbol] = priceData.price
-        } catch (err) {
-          console.warn(`Failed to fetch price for ${symbol}:`, err)
-          // Use cached price if available
-          if (portfolioData.assets[symbol]) {
-            currentPrices[symbol] = portfolioData.assets[symbol].current_price
-          }
+      const symbols = portfolioData.supported_assets
+      const results = await Promise.allSettled(symbols.map((symbol) => tradingApi.getPrice(symbol)))
+      results.forEach((result, index) => {
+        const symbol = symbols[index]
+        if (result.status === 'fulfilled') {
+          currentPrices[symbol] = result.value.price
+          return
         }
-      }
+        console.warn(`Failed to fetch price for ${symbol}:`, result.reason)
+        if (portfolioData.assets[symbol]) {
+          currentPrices[symbol] = portfolioData.assets[symbol].current_price
+        }
+      })
 
       // Calculate real-time portfolio values
       const realTimeData = await portfolioService.calculateRealTimePortfolioValue(
@@ -116,10 +116,10 @@ export function usePortfolio(autoRefresh: boolean = true, refreshInterval: numbe
   useEffect(() => {
     if (!autoRefresh || !portfolioData) return
 
-    // Update prices every 10 seconds
+    // Update prices every 15 seconds
     priceIntervalRef.current = setInterval(() => {
       updateRealTimePrices()
-    }, 10000)
+    }, 15000)
 
     // Initial price update
     updateRealTimePrices()

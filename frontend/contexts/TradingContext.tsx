@@ -54,9 +54,7 @@ interface TradingContextType {
   startTrading: () => Promise<void>
   stopTrading: () => Promise<void>
   placeOrder: (side: string, qty: string) => Promise<void>
-  placeOrderByDollar: (side: string, dollarAmount: string) => Promise<void>
   openPosition: (type: 'long' | 'short', symbol: string, qty: string) => Promise<void>
-  openPositionByDollar: (type: 'long' | 'short', symbol: string, dollarAmount: string) => Promise<void>
   closePosition: (positionId: string) => Promise<void>
   getAvailableBalance: (asset: string) => number
   validateOrder: (side: string, amount: string, inputMode: 'quantity' | 'dollar') => string[]
@@ -129,7 +127,7 @@ export function TradingProvider({ children }: { children: ReactNode }) {
     try {
       setError(null)
       const data = await tradingApi.getPositions()
-      setPositions(data)
+      setPositions(data.positions || [])
     } catch (err) {
       setError('포지션 조회 실패')
       console.error('Positions fetch error:', err)
@@ -198,37 +196,6 @@ export function TradingProvider({ children }: { children: ReactNode }) {
       setIsLoading(false)
     }
   }, [fetchPositions, fetchPortfolio, currentPrice])
-
-  const placeOrderByDollar = useCallback(async (side: string, dollarAmount: string) => {
-    try {
-      setIsLoading(true)
-      setError(null)
-      await tradingApi.placeOrderByDollar('BTCUSDT', side, dollarAmount)
-      await fetchPortfolio()
-    } catch (err) {
-      setError('달러 주문 실행 실패')
-      console.error('Place dollar order error:', err)
-    } finally {
-      setIsLoading(false)
-    }
-  }, [fetchPortfolio])
-
-  const openPositionByDollar = useCallback(async (type: 'long' | 'short', symbol: string, dollarAmount: string) => {
-    try {
-      setIsLoading(true)
-      setError(null)
-      // For now, use regular order API with dollar amount - will be enhanced with position-specific API
-      const side = type === 'long' ? 'Buy' : 'Sell'
-      await tradingApi.placeOrderByDollar(symbol, side, dollarAmount)
-      await fetchPositions()
-      await fetchPortfolio()
-    } catch (err) {
-      setError('달러 포지션 열기 실패')
-      console.error('Open dollar position error:', err)
-    } finally {
-      setIsLoading(false)
-    }
-  }, [fetchPositions, fetchPortfolio])
 
   const closePosition = useCallback(async (positionId: string) => {
     try {
@@ -335,9 +302,7 @@ export function TradingProvider({ children }: { children: ReactNode }) {
     startTrading,
     stopTrading,
     placeOrder,
-    placeOrderByDollar,
     openPosition,
-    openPositionByDollar,
     closePosition,
     getAvailableBalance,
     validateOrder,
@@ -357,9 +322,7 @@ export function TradingProvider({ children }: { children: ReactNode }) {
     startTrading,
     stopTrading,
     placeOrder,
-    placeOrderByDollar,
     openPosition,
-    openPositionByDollar,
     closePosition,
     getAvailableBalance,
     validateOrder,

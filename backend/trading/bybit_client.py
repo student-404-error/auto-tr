@@ -4,13 +4,26 @@ import asyncio
 from typing import Dict, Any, Optional
 
 from pybit.unified_trading import HTTP
-from tenacity import AsyncRetrying, retry_if_exception_type, stop_after_attempt, wait_exponential
+from tenacity import AsyncRetrying, retry_if_exception, stop_after_attempt, wait_exponential
 from dotenv import load_dotenv
+from requests.exceptions import ConnectionError as RequestsConnectionError
+from requests.exceptions import Timeout as RequestsTimeout
 
 # .env 파일 명시적 로드
 load_dotenv()
 
 logger = logging.getLogger(__name__)
+
+
+def _is_retryable_exception(exc: BaseException) -> bool:
+    transient_types = (
+        TimeoutError,
+        OSError,
+        ConnectionError,
+        RequestsTimeout,
+        RequestsConnectionError,
+    )
+    return isinstance(exc, transient_types)
 
 class BybitClient:
     def __init__(self):
@@ -38,12 +51,13 @@ class BybitClient:
                 testnet=self.testnet,
                 api_key=self.api_key,
                 api_secret=self.api_secret,
+                timeout=10,
             )
             self.authenticated = True
             logger.info("Bybit client initialized (auth on, testnet=%s)", self.testnet)
         else:
             # 공개 API만 사용 (가격 조회 등)
-            self.session = HTTP(testnet=self.testnet)
+            self.session = HTTP(testnet=self.testnet, timeout=10)
             self.authenticated = False
             logger.info("Bybit client initialized (public only, testnet=%s)", self.testnet)
 
@@ -52,7 +66,7 @@ class BybitClient:
         async for attempt in AsyncRetrying(
             stop=stop_after_attempt(5),
             wait=wait_exponential(multiplier=1, min=1, max=16),
-            retry=retry_if_exception_type(Exception),
+            retry=retry_if_exception(_is_retryable_exception),
             reraise=True,
         ):
             with attempt:
@@ -77,18 +91,19 @@ class BybitClient:
         
         prices = {}
         try:
-            for symbol in symbols:
-                price = await self.get_current_price(symbol)
-                prices[symbol] = price
+            tasks = [self.get_current_price(symbol) for symbol in symbols]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            for symbol, value in zip(symbols, results):
+                prices[symbol] = value if isinstance(value, (int, float)) else 0.0
             return prices
         except Exception as e:
-            print(f"다중 가격 조회 오류: {e}")
+            logger.warning("다중 가격 조회 오류: %s", e)
             return {symbol: 0.0 for symbol in symbols}
     
     async def get_balance(self) -> Dict[str, Any]:
         """계정 잔고 조회"""
         if not self.authenticated:
-            print("❌ API 키가 설정되지 않았습니다. 실제 잔고를 조회할 수 없습니다.")
+            logger.warning("API 키가 설정되지 않아 잔고를 조회할 수 없습니다.")
             return {}
         
         try:
@@ -117,7 +132,7 @@ class BybitClient:
                                 "available": available_float
                             }
                     except (ValueError, TypeError) as e:
-                        print(f"❌ 코인 {coin_name} 잔고 파싱 오류: {e}")
+                        logger.warning("코인 %s 잔고 파싱 오류: %s", coin_name, e)
                         continue
                         
                 logger.info("실제 잔고 조회 완료: %s개 코인", len(balances))
@@ -145,7 +160,11 @@ class BybitClient:
             if side == "Buy":
                 # 매수: USDT 잔고 기준으로 계산
                 if available_amount < self.min_order_size:
-                    print(f"❌ 잔고 부족: ${available_amount:.2f} (최소 주문: ${self.min_order_size})")
+                    logger.warning(
+                        "잔고 부족: $%.2f (최소 주문: $%.2f)",
+                        available_amount,
+                        self.min_order_size,
+                    )
                     return None
                 
                 # 최대 포지션 비율 적용
@@ -154,7 +173,7 @@ class BybitClient:
                 
                 # 최소 주문 크기 확인
                 if max_buy_amount < self.min_order_size:
-                    print(f"❌ 주문 금액이 너무 작음: ${max_buy_amount:.2f}")
+                    logger.warning("주문 금액이 너무 작음: $%.2f", max_buy_amount)
                     return None
                 
                 # 심볼별 정밀도 조정
@@ -166,7 +185,7 @@ class BybitClient:
                 base_currency = symbol.replace("USDT", "")
                 crypto_balance = balance.get(base_currency, {}).get("available", 0)
                 if crypto_balance <= 0:
-                    print(f"❌ 매도할 {base_currency}가 없습니다")
+                    logger.warning("매도할 %s가 없습니다", base_currency)
                     return None
                 
                 # 전체 암호화폐 매도
@@ -201,7 +220,13 @@ class BybitClient:
         if not self.authenticated:
             current_price = await self.get_current_price(symbol)
             order_value = float(qty) * current_price
-            print(f"🔒 실제 거래 모드 (API 키 필요): {side} {qty} {symbol} (약 ${order_value:.2f})")
+            logger.warning(
+                "실거래 주문 불가(키 없음): %s %s %s (약 $%.2f)",
+                side,
+                qty,
+                symbol,
+                order_value,
+            )
             return {
                 "success": False,
                 "error": "API 키가 설정되지 않았습니다. .env 파일에 BYBIT_API_KEY와 BYBIT_API_SECRET을 설정하세요."
@@ -224,7 +249,7 @@ class BybitClient:
                     "error": f"주문 금액이 최소 한도보다 작습니다: ${order_value:.2f} < ${self.min_order_size}"
                 }
             
-            print(f"🚀 실제 주문 실행: {side} {qty} {symbol} (${order_value:.2f})")
+            logger.info("주문 실행: %s %s %s ($%.2f)", side, qty, symbol, order_value)
             
             response = await self._call(
                 self.session.place_order,
@@ -253,7 +278,7 @@ class BybitClient:
     async def get_order_history(self, symbol: str = "BTCUSDT", limit: int = 50) -> list:
         """주문 내역 조회"""
         if not self.authenticated:
-            print("❌ API 키가 설정되지 않았습니다. 실제 거래 내역을 조회할 수 없습니다.")
+            logger.warning("API 키가 설정되지 않아 거래 내역을 조회할 수 없습니다.")
             return []
         
         try:
@@ -303,10 +328,11 @@ class BybitClient:
         
         kline_data = {}
         try:
-            for symbol in symbols:
-                data = await self.get_kline_data(symbol, interval, limit)
-                kline_data[symbol] = data
+            tasks = [self.get_kline_data(symbol, interval, limit) for symbol in symbols]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            for symbol, value in zip(symbols, results):
+                kline_data[symbol] = value if isinstance(value, list) else []
             return kline_data
         except Exception as e:
-            print(f"다중 캔들 데이터 조회 오류: {e}")
+            logger.warning("다중 캔들 데이터 조회 오류: %s", e)
             return {symbol: [] for symbol in symbols}
