@@ -1,10 +1,17 @@
 'use client'
 
+import Link from 'next/link'
+import { usePathname } from 'next/navigation'
+
 interface SidebarProps {
   serverOnline: boolean
 }
 
 export default function Sidebar({ serverOnline }: SidebarProps) {
+  const pathname = usePathname()
+  const isHome = pathname === '/'
+  const isStrategy = pathname === '/strategy'
+
   return (
     <>
       {/* Mobile Top Header */}
@@ -17,14 +24,14 @@ export default function Sidebar({ serverOnline }: SidebarProps) {
 
       {/* Mobile Bottom Nav */}
       <nav className="md:hidden fixed bottom-0 w-full bg-card-dark border-t border-slate-800 z-50 flex justify-around py-3 px-2">
-        <button className="flex flex-col items-center gap-1 text-primary">
+        <Link href="/" className={`flex flex-col items-center gap-1 ${isHome ? 'text-primary' : 'text-slate-500 hover:text-primary/70'}`}>
           <span className="material-icons text-2xl">dashboard</span>
           <span className="text-xxs font-medium uppercase tracking-wider">Dash</span>
-        </button>
-        <button className="flex flex-col items-center gap-1 text-slate-500 hover:text-primary/70">
+        </Link>
+        <Link href="/strategy" className={`flex flex-col items-center gap-1 ${isStrategy ? 'text-primary' : 'text-slate-500 hover:text-primary/70'}`}>
           <span className="material-icons text-2xl">candlestick_chart</span>
           <span className="text-xxs font-medium uppercase tracking-wider">Strats</span>
-        </button>
+        </Link>
         <button className="flex flex-col items-center gap-1 text-slate-500 hover:text-primary/70">
           <span className="material-icons text-2xl">history</span>
           <span className="text-xxs font-medium uppercase tracking-wider">Backtest</span>
@@ -43,14 +50,14 @@ export default function Sidebar({ serverOnline }: SidebarProps) {
             <span className="font-bold text-lg tracking-tight hidden lg:block text-white">DataQuantLab</span>
           </div>
           <nav className="flex flex-col gap-2">
-            <a className="flex items-center gap-3 px-3 py-3 rounded-lg bg-primary/10 text-primary border border-primary/20" href="#">
+            <Link href="/" className={`flex items-center gap-3 px-3 py-3 rounded-lg transition-colors ${isHome ? 'bg-primary/10 text-primary border border-primary/20' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}>
               <span className="material-icons">dashboard</span>
               <span className="hidden lg:block font-medium">Overview</span>
-            </a>
-            <a className="flex items-center gap-3 px-3 py-3 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors" href="#">
+            </Link>
+            <Link href="/strategy" className={`flex items-center gap-3 px-3 py-3 rounded-lg transition-colors ${isStrategy ? 'bg-primary/10 text-primary border border-primary/20' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}>
               <span className="material-icons">candlestick_chart</span>
               <span className="hidden lg:block font-medium">Active Strategies</span>
-            </a>
+            </Link>
             <a className="flex items-center gap-3 px-3 py-3 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors" href="#">
               <span className="material-icons">analytics</span>
               <span className="hidden lg:block font-medium">Analytics</span>
