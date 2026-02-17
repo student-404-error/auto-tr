@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { tradingApi } from '@/utils/api'
+import { isAuthenticated, restoreAuthHeader } from '@/utils/auth'
 
 interface StrategyStatus {
   strategy?: string
@@ -41,7 +42,6 @@ interface LatestTrade {
   qty: number
 }
 
-// Maps param keys to Material Icons Round names
 const PARAM_ICONS: Record<string, string> = {
   symbol: 'currency_bitcoin',
   interval: 'schedule',
@@ -61,7 +61,6 @@ const PARAM_ICONS: Record<string, string> = {
   ma_long: 'slow_motion_video',
 }
 
-// Human-friendly parameter labels
 const PARAM_LABELS: Record<string, string> = {
   symbol: 'Symbol',
   interval: 'Interval',
@@ -81,7 +80,6 @@ const PARAM_LABELS: Record<string, string> = {
   ma_long: 'MA Long',
 }
 
-// Strategy descriptions
 const STRATEGY_DESCRIPTIONS: Record<string, string> = {
   regime_trend:
     'Trend-following strategy using a dual EMA regime filter. Enters long positions when the fast EMA crosses above the slow EMA by a minimum gap, and uses ATR-based trailing stops for risk management.',
@@ -89,7 +87,6 @@ const STRATEGY_DESCRIPTIONS: Record<string, string> = {
     'RSI and moving-average crossover strategy. Buys when RSI is oversold and short MA crosses above long MA. Sells when RSI is overbought or short MA crosses below long MA.',
 }
 
-// Strategy display names
 const STRATEGY_NAMES: Record<string, string> = {
   regime_trend: 'Regime Trend Engine',
   simple: 'Simple RSI-MA Strategy',
@@ -118,7 +115,6 @@ function formatParamValue(key: string, value: any): string {
   return String(value)
 }
 
-// Highlight params that are tuning knobs vs config params
 function isHighlightParam(key: string): boolean {
   const highlights = [
     'ema_fast_period', 'ema_slow_period', 'min_trend_gap_pct',
@@ -135,6 +131,17 @@ export default function StrategyPage() {
   const [summary, setSummary] = useState<PositionSummary | null>(null)
   const [latestTrade, setLatestTrade] = useState<LatestTrade | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [authChecked, setAuthChecked] = useState(false)
+
+  // Auth guard: redirect to /auth if not authenticated
+  useEffect(() => {
+    restoreAuthHeader()
+    if (!isAuthenticated()) {
+      router.replace('/auth')
+      return
+    }
+    setAuthChecked(true)
+  }, [router])
 
   const fetchAll = useCallback(async () => {
     try {
@@ -160,12 +167,13 @@ export default function StrategyPage() {
   }, [])
 
   useEffect(() => {
+    if (!authChecked) return
     fetchAll()
     const interval = setInterval(fetchAll, 15000)
     return () => clearInterval(interval)
-  }, [fetchAll])
+  }, [fetchAll, authChecked])
 
-  if (isLoading) {
+  if (!authChecked || isLoading) {
     return (
       <div className="flex w-full min-h-screen items-center justify-center bg-background-dark">
         <div className="w-10 h-10 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
@@ -202,7 +210,7 @@ export default function StrategyPage() {
             {strategyKey.toUpperCase()}
           </span>
         </div>
-        <div className="w-10 h-10" /> {/* Spacer for centering */}
+        <div className="w-10 h-10" />
       </header>
 
       {/* Main Content */}
@@ -230,7 +238,6 @@ export default function StrategyPage() {
             <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wider">Performance Metrics</h3>
           </div>
           <div className="grid grid-cols-2 gap-6 mb-6">
-            {/* Total Return */}
             <div>
               <p className="text-xs text-slate-500 mb-1">Monthly Return</p>
               <div className="flex items-baseline gap-2">
@@ -242,7 +249,6 @@ export default function StrategyPage() {
                 </span>
               </div>
             </div>
-            {/* Win Rate as Sharpe-style hero number */}
             <div>
               <p className="text-xs text-slate-500 mb-1">Win Rate</p>
               <div className="flex items-baseline gap-2">
@@ -275,7 +281,7 @@ export default function StrategyPage() {
           <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-success/50 to-transparent opacity-50"></div>
         </div>
 
-        {/* Active/Paused Toggle (visual only - shows current state) */}
+        {/* Active/Paused Toggle */}
         <div className="bg-surface rounded-lg p-1.5 flex shadow-inner border border-white/5">
           <div className={`flex-1 py-3 px-4 rounded-md font-semibold text-sm transition-all duration-300 flex items-center justify-center gap-2 ${isActive ? 'bg-primary shadow-glow text-white' : 'text-slate-500'}`}>
             <span className="material-icons-round text-base">play_circle</span>
