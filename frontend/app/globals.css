@@ -1,44 +1,24 @@
-/* Tailwind CSS directives */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
-  * {
-    @apply border-border;
-  }
-
   body {
-    @apply bg-dark-bg text-white;
+    @apply bg-background-dark text-slate-200 font-display;
   }
 }
 
-@layer components {
-  .card {
-    @apply bg-dark-card rounded-lg p-6 shadow-lg border border-gray-700;
-  }
+/* Custom scrollbar for terminal look */
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
 
-  .btn-primary {
-    @apply bg-crypto-blue hover:bg-crypto-blue/80 text-white px-4 py-2 rounded-lg transition-colors;
-  }
-
-  .btn-success {
-    @apply bg-crypto-green hover:bg-crypto-green/80 text-white px-4 py-2 rounded-lg transition-colors;
-  }
-
-  .btn-danger {
-    @apply bg-crypto-red hover:bg-crypto-red/80 text-white px-4 py-2 rounded-lg transition-colors;
-  }
-
-  .price-up {
-    @apply text-crypto-green;
-  }
-
-  .price-down {
-    @apply text-crypto-red;
-  }
-
-  .loading-spinner {
-    @apply animate-spin rounded-full h-8 w-8 border-b-2 border-crypto-blue;
-  }
+.glass-panel {
+  background: rgba(22, 32, 42, 0.8);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
 }
