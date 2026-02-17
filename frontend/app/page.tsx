@@ -2,8 +2,6 @@
 
 import { useState, useEffect } from 'react'
 import Dashboard from '@/components/Dashboard'
-import { TradingProvider } from '@/contexts/TradingContext'
-import { FavoritesProvider } from '@/contexts/FavoritesContext'
 
 export default function Home() {
   const [mounted, setMounted] = useState(false)
@@ -14,19 +12,11 @@ export default function Home() {
 
   if (!mounted) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="loading-spinner"></div>
+      <div className="min-h-screen w-full flex items-center justify-center bg-background-dark">
+        <div className="w-10 h-10 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
       </div>
     )
   }
 
-  return (
-    <FavoritesProvider>
-      <TradingProvider>
-        <main className="min-h-screen bg-dark-bg">
-          <Dashboard />
-        </main>
-      </TradingProvider>
-    </FavoritesProvider>
-  )
+  return <Dashboard />
 }
