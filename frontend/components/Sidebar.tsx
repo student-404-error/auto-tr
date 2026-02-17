@@ -11,6 +11,7 @@ export default function Sidebar({ serverOnline }: SidebarProps) {
   const pathname = usePathname()
   const isHome = pathname === '/'
   const isStrategy = pathname === '/strategy'
+  const isAnalytics = pathname === '/analytics'
 
   return (
     <>
@@ -32,10 +33,10 @@ export default function Sidebar({ serverOnline }: SidebarProps) {
           <span className="material-icons text-2xl">candlestick_chart</span>
           <span className="text-xxs font-medium uppercase tracking-wider">Strats</span>
         </Link>
-        <button className="flex flex-col items-center gap-1 text-slate-500 hover:text-primary/70">
-          <span className="material-icons text-2xl">history</span>
-          <span className="text-xxs font-medium uppercase tracking-wider">Backtest</span>
-        </button>
+        <Link href="/analytics" className={`flex flex-col items-center gap-1 ${isAnalytics ? 'text-primary' : 'text-slate-500 hover:text-primary/70'}`}>
+          <span className="material-icons text-2xl">analytics</span>
+          <span className="text-xxs font-medium uppercase tracking-wider">Analytics</span>
+        </Link>
         <button className="flex flex-col items-center gap-1 text-slate-500 hover:text-primary/70">
           <span className="material-icons text-2xl">settings</span>
           <span className="text-xxs font-medium uppercase tracking-wider">Config</span>
@@ -58,10 +59,10 @@ export default function Sidebar({ serverOnline }: SidebarProps) {
               <span className="material-icons">candlestick_chart</span>
               <span className="hidden lg:block font-medium">Active Strategies</span>
             </Link>
-            <a className="flex items-center gap-3 px-3 py-3 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors" href="#">
+            <Link href="/analytics" className={`flex items-center gap-3 px-3 py-3 rounded-lg transition-colors ${isAnalytics ? 'bg-primary/10 text-primary border border-primary/20' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}>
               <span className="material-icons">analytics</span>
               <span className="hidden lg:block font-medium">Analytics</span>
-            </a>
+            </Link>
             <a className="flex items-center gap-3 px-3 py-3 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors" href="#">
               <span className="material-icons">terminal</span>
               <span className="hidden lg:block font-medium">Logs</span>
