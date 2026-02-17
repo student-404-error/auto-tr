@@ -1,7 +1,9 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import { tradingApi } from '@/utils/api'
+import { isAuthenticated, restoreAuthHeader } from '@/utils/auth'
 import Sidebar from './Sidebar'
 import DashboardHeader from './DashboardHeader'
 import MetricCards from './MetricCards'
@@ -33,11 +35,23 @@ interface Portfolio {
 }
 
 export default function Dashboard() {
+  const router = useRouter()
   const [portfolio, setPortfolio] = useState<Portfolio | null>(null)
   const [tradingStatus, setTradingStatus] = useState<TradingStatus | null>(null)
   const [currentPrice, setCurrentPrice] = useState(0)
   const [serverOnline, setServerOnline] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
+  const [authChecked, setAuthChecked] = useState(false)
+
+  // Auth guard: redirect to /auth if not authenticated
+  useEffect(() => {
+    restoreAuthHeader()
+    if (!isAuthenticated()) {
+      router.replace('/auth')
+      return
+    }
+    setAuthChecked(true)
+  }, [router])
 
   const fetchAll = useCallback(async () => {
     try {
@@ -67,12 +81,13 @@ export default function Dashboard() {
   }, [])
 
   useEffect(() => {
+    if (!authChecked) return
     fetchAll()
     const interval = setInterval(fetchAll, 15000)
     return () => clearInterval(interval)
-  }, [fetchAll])
+  }, [fetchAll, authChecked])
 
-  if (isLoading) {
+  if (!authChecked || isLoading) {
     return (
       <div className="flex w-full min-h-screen items-center justify-center bg-background-dark">
         <div className="text-center">

@@ -1,5 +1,7 @@
 'use client'
 
+import Link from 'next/link'
+
 interface TradingStatus {
   is_active: boolean
   strategy_name?: string
@@ -39,8 +41,8 @@ export default function MetricCards({
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-      {/* Strategy Card */}
-      <div className="bg-card-dark rounded-xl p-5 border border-slate-700/60 shadow-sm relative overflow-hidden group">
+      {/* Strategy Card - Clickable link to /strategy */}
+      <Link href="/strategy" className="bg-card-dark rounded-xl p-5 border border-slate-700/60 shadow-sm relative overflow-hidden group cursor-pointer hover:border-primary/40 transition-colors">
         <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
           <span className="material-icons text-6xl text-primary">psychology</span>
         </div>
@@ -53,8 +55,11 @@ export default function MetricCards({
           <span className={`px-2 py-1 rounded text-xs font-bold ${isActive ? 'bg-green-500/10 text-green-400 border border-green-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'}`}>
             {isActive ? 'ACTIVE' : 'STOPPED'}
           </span>
+          <span className="text-xs text-slate-500 group-hover:text-primary transition-colors flex items-center gap-0.5">
+            Details <span className="material-icons text-xs">arrow_forward</span>
+          </span>
         </div>
-      </div>
+      </Link>
 
       {/* Position Card */}
       <div className="bg-card-dark rounded-xl p-5 border border-slate-700/60 shadow-sm">
