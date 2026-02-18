@@ -5,15 +5,13 @@ from datetime import datetime
 from fastapi import APIRouter, HTTPException, Request, Depends
 from pydantic import BaseModel, Field
 from typing import Optional, Literal, List
-from slowapi import Limiter
-from slowapi.util import get_remote_address
+from api.limiter import limiter
 from models.trade_tracker_db import TradeTrackerDB
 from services.position_service import PositionService
 from trading.strategy_params import RegimeTrendParams
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
-limiter = Limiter(key_func=get_remote_address)
 
 # 단순 헤더 기반 API 키 보호
 def require_api_key(request: Request):

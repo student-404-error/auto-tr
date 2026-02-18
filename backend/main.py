@@ -5,8 +5,6 @@ import os
 from datetime import datetime
 from dotenv import load_dotenv
 import logging
-from slowapi import Limiter
-from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 
 # 로깅 설정
@@ -17,6 +15,7 @@ logger = logging.getLogger(__name__)
 load_dotenv()
 
 from api.routes import router, trade_tracker_db
+from api.limiter import limiter
 from trading.bybit_client import BybitClient
 from trading.regime_trend_strategy import RegimeTrendStrategy
 from trading.breakout_volume_strategy import BreakoutVolumeStrategy
@@ -31,8 +30,7 @@ from trading.strategy_params import (
 
 app = FastAPI(title="Bitcoin Auto-Trading API", version="1.0.0")
 
-# Rate Limiting
-limiter = Limiter(key_func=get_remote_address, default_limits=["60/minute"])
+# Rate Limiting — api.limiter에서 단일 인스턴스 공유
 app.state.limiter = limiter
 
 
