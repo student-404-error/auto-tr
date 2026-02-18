@@ -59,7 +59,7 @@ export default function AnalyticsPage() {
         setAllocation(
           Object.entries(allocationData.allocation || allocationData).map(([symbol, percentage]) => ({
             symbol,
-            percentage,
+            percentage: Number(percentage || 0),
           }))
         )
 

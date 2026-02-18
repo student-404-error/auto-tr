@@ -24,14 +24,19 @@ interface PerformanceData {
 }
 
 interface PositionSummary {
-  total_trades?: number
-  winning_trades?: number
-  losing_trades?: number
-  win_rate?: number
-  total_pnl?: number
-  total_pnl_percent?: number
-  max_drawdown_percent?: number
-  avg_trade_pnl?: number
+  open_positions_count?: number
+  closed_positions_count?: number
+  total_unrealized_pnl?: number
+  realized_pnl?: number
+  statistics?: {
+    total_positions?: number
+    winning_positions?: number
+    losing_positions?: number
+    win_rate?: number
+    total_realized_pnl?: number
+    best_trade?: number
+    worst_trade?: number
+  }
 }
 
 interface LatestTrade {
@@ -157,7 +162,16 @@ export default function StrategyPage() {
       if (summaryRes.status === 'fulfilled') setSummary(summaryRes.value)
       if (tradesRes.status === 'fulfilled') {
         const trades = tradesRes.value.trades || []
-        if (trades.length > 0) setLatestTrade(trades[0])
+        if (trades.length > 0) {
+          const t = trades[0]
+          setLatestTrade({
+            timestamp: t.ts || t.timestamp || '',
+            side: t.side || '',
+            symbol: t.symbol || '',
+            price: Number(t.price || 0),
+            qty: Number(t.quantity || t.qty || 0),
+          })
+        }
       }
     } catch {
       // keep existing data
@@ -190,9 +204,9 @@ export default function StrategyPage() {
 
   const totalReturn = performance?.monthly_change_percent || 0
   const totalReturnPositive = totalReturn >= 0
-  const winRate = summary?.win_rate || 0
-  const totalTrades = summary?.total_trades || 0
-  const maxDD = summary?.max_drawdown_percent || 0
+  const winRate = summary?.statistics?.win_rate || 0
+  const totalTrades = summary?.statistics?.total_positions || 0
+  const maxDD = 0
 
   return (
     <div className="w-full min-h-screen bg-background-dark text-slate-200 font-display flex flex-col antialiased">
