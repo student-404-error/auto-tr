@@ -16,7 +16,15 @@ from api.routes import router, trade_tracker_db
 from trading.bybit_client import BybitClient
 from trading.simple_strategy import TradingStrategy as SimpleTradingStrategy
 from trading.regime_trend_strategy import RegimeTrendStrategy
-from trading.strategy_params import RegimeTrendParams
+from trading.breakout_volume_strategy import BreakoutVolumeStrategy
+from trading.mean_reversion_strategy import MeanReversionStrategy
+from trading.dual_timeframe_strategy import DualTimeframeStrategy
+from trading.strategy_params import (
+    RegimeTrendParams,
+    BreakoutVolumeParams,
+    MeanReversionParams,
+    DualTimeframeParams,
+)
 
 app = FastAPI(title="Bitcoin Auto-Trading API", version="1.0.0")
 
@@ -38,38 +46,60 @@ app.add_middleware(
 )
 
 
+def build_strategy(strategy_name: str, client: BybitClient):
+    """전략 이름으로 전략 인스턴스 생성"""
+    symbol = os.getenv("STRATEGY_SYMBOL", "BTCUSDT")
+    loop_seconds = int(os.getenv("STRATEGY_LOOP_SECONDS", "60"))
+
+    if strategy_name == "simple":
+        return SimpleTradingStrategy(client, trade_tracker_db)
+
+    if strategy_name == "breakout_volume":
+        return BreakoutVolumeStrategy(
+            client, trade_tracker_db,
+            params=BreakoutVolumeParams(symbol=symbol, loop_seconds=loop_seconds),
+        )
+
+    if strategy_name == "mean_reversion":
+        return MeanReversionStrategy(
+            client, trade_tracker_db,
+            params=MeanReversionParams(symbol=symbol, loop_seconds=loop_seconds),
+        )
+
+    if strategy_name == "dual_timeframe":
+        return DualTimeframeStrategy(
+            client, trade_tracker_db,
+            params=DualTimeframeParams(symbol=symbol, loop_seconds=loop_seconds),
+        )
+
+    # 기본: regime_trend
+    params = RegimeTrendParams(
+        symbol=symbol,
+        interval=os.getenv("STRATEGY_INTERVAL", "15"),
+        lookback_bars=int(os.getenv("STRATEGY_LOOKBACK_BARS", "260")),
+        ema_fast_period=int(os.getenv("STRATEGY_EMA_FAST", "50")),
+        ema_slow_period=int(os.getenv("STRATEGY_EMA_SLOW", "200")),
+        min_trend_gap_pct=float(os.getenv("STRATEGY_MIN_TREND_GAP_PCT", "0.001")),
+        atr_period=int(os.getenv("STRATEGY_ATR_PERIOD", "14")),
+        initial_stop_atr_mult=float(os.getenv("STRATEGY_INITIAL_STOP_ATR_MULT", "2.5")),
+        trailing_stop_atr_mult=float(os.getenv("STRATEGY_TRAILING_STOP_ATR_MULT", "3.0")),
+        loop_seconds=loop_seconds,
+        cooldown_bars=int(os.getenv("STRATEGY_COOLDOWN_BARS", "2")),
+    )
+    return RegimeTrendStrategy(client, trade_tracker_db, params=params)
+
+
 @app.on_event("startup")
 async def startup_event():
     """앱 시작시 초기화"""
-
-    # Bybit 클라이언트 초기화
     app.state.trading_client = BybitClient()
     app.state.trade_tracker = trade_tracker_db
-    strategy_name = os.getenv("TRADING_STRATEGY", "regime_trend").lower()
 
-    if strategy_name == "simple":
-        app.state.trading_strategy = SimpleTradingStrategy(
-            app.state.trading_client, trade_tracker_db
-        )
-    else:
-        params = RegimeTrendParams(
-            symbol=os.getenv("STRATEGY_SYMBOL", "BTCUSDT"),
-            interval=os.getenv("STRATEGY_INTERVAL", "15"),
-            lookback_bars=int(os.getenv("STRATEGY_LOOKBACK_BARS", "260")),
-            ema_fast_period=int(os.getenv("STRATEGY_EMA_FAST", "50")),
-            ema_slow_period=int(os.getenv("STRATEGY_EMA_SLOW", "200")),
-            min_trend_gap_pct=float(os.getenv("STRATEGY_MIN_TREND_GAP_PCT", "0.001")),
-            atr_period=int(os.getenv("STRATEGY_ATR_PERIOD", "14")),
-            initial_stop_atr_mult=float(os.getenv("STRATEGY_INITIAL_STOP_ATR_MULT", "2.5")),
-            trailing_stop_atr_mult=float(os.getenv("STRATEGY_TRAILING_STOP_ATR_MULT", "3.0")),
-            loop_seconds=int(os.getenv("STRATEGY_LOOP_SECONDS", "60")),
-            cooldown_bars=int(os.getenv("STRATEGY_COOLDOWN_BARS", "2")),
-        )
-        app.state.trading_strategy = RegimeTrendStrategy(
-            app.state.trading_client,
-            trade_tracker_db,
-            params=params,
-        )
+    strategy_name = os.getenv("TRADING_STRATEGY", "regime_trend").lower()
+    app.state.trading_strategy = build_strategy(strategy_name, app.state.trading_client)
+    app.state.strategy_task = None
+    # 전략 전환 함수를 app.state에 노출
+    app.state.build_strategy = build_strategy
 
     logger.info("🚀 Bitcoin Auto-Trading System 시작됨")
     logger.info("📡 REST API 준비됨")

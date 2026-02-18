@@ -4,7 +4,7 @@ import logging
 from datetime import datetime
 from fastapi import APIRouter, HTTPException, Request, Depends
 from pydantic import BaseModel
-from typing import Optional, Literal
+from typing import Optional, Literal, List
 from models.trade_tracker_db import TradeTrackerDB
 from services.position_service import PositionService
 from trading.strategy_params import RegimeTrendParams
@@ -48,6 +48,12 @@ class ManualOrderRequest(BaseModel):
 
 class StrategyParamsUpdateRequest(BaseModel):
     params: dict
+
+
+AVAILABLE_STRATEGIES = ["regime_trend", "breakout_volume", "mean_reversion", "dual_timeframe"]
+
+class StrategyChangeRequest(BaseModel):
+    strategy: str
 
 
 def get_trading_client(request: Request):
@@ -705,6 +711,146 @@ async def auto_close_positions(
             "closed_positions": len(results),
             "results": results
         }
-        
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── 전략 관리 ──────────────────────────────────────────────────────────────
+
+@router.get("/trading/strategies")
+async def list_strategies(request: Request):
+    """사용 가능한 전략 목록 및 현재 선택된 전략 반환"""
+    trading_strategy = getattr(request.app.state, "trading_strategy", None)
+    current = trading_strategy.get_strategy_status().get("strategy", "unknown") if trading_strategy else "unknown"
+    strategies = {
+        "regime_trend": {
+            "name": "Regime Trend Engine",
+            "description": "Dual EMA regime filter with ATR trailing stop. Best in trending markets.",
+        },
+        "breakout_volume": {
+            "name": "Breakout + Volume",
+            "description": "Enters on prior-high breakout confirmed by volume surge. Reduces false breakouts.",
+        },
+        "mean_reversion": {
+            "name": "Mean Reversion",
+            "description": "Buys when RSI is oversold and price is below Bollinger lower band. Best in ranging markets.",
+        },
+        "dual_timeframe": {
+            "name": "Dual Timeframe",
+            "description": "Uses 1H trend direction + 15M pullback entry. Filters noise with multi-TF confluence.",
+        },
+    }
+    return {"current": current, "available": strategies}
+
+
+@router.post("/trading/strategy")
+async def change_strategy(
+    request: Request,
+    body: StrategyChangeRequest,
+    _auth=Depends(require_api_key),
+):
+    """전략 변경 (자동매매가 멈춘 상태에서만 허용)"""
+    trading_strategy = getattr(request.app.state, "trading_strategy", None)
+
+    if trading_strategy and trading_strategy.is_active:
+        raise HTTPException(
+            status_code=400,
+            detail="Stop trading before changing strategy.",
+        )
+
+    strategy_name = body.strategy.strip().lower()
+    if strategy_name not in AVAILABLE_STRATEGIES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Unknown strategy '{strategy_name}'. Available: {AVAILABLE_STRATEGIES}",
+        )
+
+    build_strategy = getattr(request.app.state, "build_strategy", None)
+    if not build_strategy:
+        raise HTTPException(status_code=500, detail="Strategy factory not available.")
+
+    trading_client = get_trading_client(request)
+    new_strategy = build_strategy(strategy_name, trading_client)
+    request.app.state.trading_strategy = new_strategy
+
+    logger.info("Strategy changed to: %s", strategy_name)
+    return {
+        "success": True,
+        "strategy": strategy_name,
+        "status": new_strategy.get_strategy_status(),
+    }
+
+
+# ── DB 조회 API ───────────────────────────────────────────────────────────
+
+@router.get("/db/trades")
+async def db_get_trades(limit: int = 100, _auth=Depends(require_api_key)):
+    """trades 테이블 조회"""
+    try:
+        rows = await trade_tracker_db.recent_trades(limit)
+        return {"trades": rows, "count": len(rows)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/db/signal-log")
+async def db_get_signal_log(
+    strategy: Optional[str] = None,
+    symbol: Optional[str] = None,
+    signal: Optional[str] = None,
+    limit: int = 200,
+    _auth=Depends(require_api_key),
+):
+    """signal_log 테이블 조회 (전략별 지표 이력)"""
+    try:
+        rows = await trade_tracker_db.get_signal_logs(
+            strategy=strategy, symbol=symbol, limit=limit, signal_filter=signal
+        )
+        return {"logs": rows, "count": len(rows)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/db/signal-log/stats")
+async def db_signal_log_stats(strategy: Optional[str] = None, _auth=Depends(require_api_key)):
+    """전략별 신호 통계 (HOLD/BUY/SELL 비율 등)"""
+    try:
+        stats = await trade_tracker_db.get_signal_log_stats(strategy=strategy)
+        return stats
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/db/positions")
+async def db_get_positions(
+    status: Optional[str] = None,
+    symbol: Optional[str] = None,
+    limit: int = 100,
+    _auth=Depends(require_api_key),
+):
+    """positions 테이블 조회"""
+    try:
+        rows = await trade_tracker_db.get_positions(status=status, symbol=symbol, limit=limit)
+        return {"positions": rows, "count": len(rows)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/db/summary")
+async def db_summary(_auth=Depends(require_api_key)):
+    """DB 전체 현황 요약"""
+    try:
+        trades = await trade_tracker_db.recent_trades(1)
+        signal_stats = await trade_tracker_db.get_signal_log_stats()
+        positions_open = await trade_tracker_db.get_positions(status="open", limit=1000)
+        positions_closed = await trade_tracker_db.get_positions(status="closed", limit=1000)
+        return {
+            "signal_log_total": signal_stats.get("total", 0),
+            "signal_log_by_signal": signal_stats.get("by_signal", {}),
+            "open_positions": len(positions_open),
+            "closed_positions": len(positions_closed),
+            "latest_trade_ts": trades[0].get("ts") if trades else None,
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

@@ -216,6 +216,36 @@ export const tradingApi = {
     return response.data
   },
 
+  // 전략 목록 조회
+  getStrategies: async () => {
+    const response = await api.get('/api/trading/strategies')
+    return response.data
+  },
+
+  // 전략 변경
+  changeStrategy: async (strategy: string) => {
+    const response = await api.post('/api/trading/strategy', { strategy })
+    return response.data
+  },
+
+  // DB 요약 조회
+  getDbSummary: async () => {
+    const response = await api.get('/api/db/summary')
+    return response.data
+  },
+
+  // DB signal_log 조회
+  getDbSignalLog: async (params?: { strategy?: string; symbol?: string; signal?: string; limit?: number }) => {
+    const response = await api.get('/api/db/signal-log', { params })
+    return response.data
+  },
+
+  // DB signal_log 통계
+  getDbSignalStats: async (strategy?: string) => {
+    const response = await api.get('/api/db/signal-log/stats', { params: strategy ? { strategy } : {} })
+    return response.data
+  },
+
   // 자동 포지션 종료
   autoClosePositions: async (
     symbol?: string,

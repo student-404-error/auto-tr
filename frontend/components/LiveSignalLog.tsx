@@ -63,7 +63,7 @@ export default function LiveSignalLog() {
 
   useEffect(() => {
     fetchSignals()
-    const interval = setInterval(fetchSignals, 5000)
+    const interval = setInterval(fetchSignals, 30000)
     return () => clearInterval(interval)
   }, [fetchSignals])
 

@@ -64,6 +64,20 @@ const PARAM_ICONS: Record<string, string> = {
   rsi_overbought: 'arrow_upward',
   ma_short: 'speed',
   ma_long: 'slow_motion_video',
+  breakout_period: 'bar_chart',
+  volume_ma_period: 'stacked_bar_chart',
+  volume_multiplier: 'trending_up',
+  stop_atr_mult: 'security',
+  bb_period: 'candlestick_chart',
+  bb_std: 'functions',
+  htf_interval: 'schedule',
+  htf_ema_fast: 'speed',
+  htf_ema_slow: 'slow_motion_video',
+  ltf_interval: 'schedule',
+  ltf_lookback_bars: 'history',
+  ltf_rsi_period: 'analytics',
+  ltf_rsi_oversold: 'arrow_downward',
+  ltf_ema_period: 'show_chart',
 }
 
 const PARAM_LABELS: Record<string, string> = {
@@ -83,18 +97,54 @@ const PARAM_LABELS: Record<string, string> = {
   rsi_overbought: 'RSI Overbought',
   ma_short: 'MA Short',
   ma_long: 'MA Long',
+  breakout_period: 'Breakout Period',
+  volume_ma_period: 'Volume MA Period',
+  volume_multiplier: 'Volume Multiplier',
+  stop_atr_mult: 'Stop (ATR x)',
+  bb_period: 'BB Period',
+  bb_std: 'BB Std Dev',
+  htf_interval: 'HTF Interval',
+  htf_ema_fast: 'HTF EMA Fast',
+  htf_ema_slow: 'HTF EMA Slow',
+  ltf_interval: 'LTF Interval',
+  ltf_lookback_bars: 'LTF Lookback',
+  ltf_rsi_period: 'LTF RSI Period',
+  ltf_rsi_oversold: 'LTF RSI Oversold',
+  ltf_ema_period: 'LTF EMA Period',
 }
 
-const STRATEGY_DESCRIPTIONS: Record<string, string> = {
-  regime_trend:
-    'Trend-following strategy using a dual EMA regime filter. Enters long positions when the fast EMA crosses above the slow EMA by a minimum gap, and uses ATR-based trailing stops for risk management.',
-  simple:
-    'RSI and moving-average crossover strategy. Buys when RSI is oversold and short MA crosses above long MA. Sells when RSI is overbought or short MA crosses below long MA.',
+interface StrategyMeta {
+  name: string
+  description: string
+  icon: string
+  badge: string
 }
 
-const STRATEGY_NAMES: Record<string, string> = {
-  regime_trend: 'Regime Trend Engine',
-  simple: 'Simple RSI-MA Strategy',
+const STRATEGY_META: Record<string, StrategyMeta> = {
+  regime_trend: {
+    name: 'Regime Trend Engine',
+    description: 'Dual EMA regime filter with ATR trailing stop. Enters when fast EMA is above slow EMA by a minimum gap. Best in trending markets.',
+    icon: 'trending_up',
+    badge: 'Trend',
+  },
+  breakout_volume: {
+    name: 'Breakout + Volume',
+    description: 'Enters on prior-high breakout confirmed by volume surge. Reduces false breakouts by requiring volume × multiplier above MA.',
+    icon: 'bar_chart',
+    badge: 'Breakout',
+  },
+  mean_reversion: {
+    name: 'Mean Reversion',
+    description: 'Buys when RSI is oversold and price is below Bollinger lower band. Exits at BB midline or RSI overbought. Best in ranging markets.',
+    icon: 'compare_arrows',
+    badge: 'Reversion',
+  },
+  dual_timeframe: {
+    name: 'Dual Timeframe',
+    description: 'Uses 1H trend direction + 15M pullback entry timing. Filters noise with multi-TF confluence.',
+    icon: 'layers',
+    badge: 'Multi-TF',
+  },
 }
 
 function formatTime(timestamp: string): string {
@@ -138,9 +188,13 @@ export default function StrategyPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isSavingParams, setIsSavingParams] = useState(false)
+  const [isChangingStrategy, setIsChangingStrategy] = useState(false)
   const [paramsDraft, setParamsDraft] = useState<Record<string, any>>({})
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  const [successMsg, setSuccessMsg] = useState<string | null>(null)
   const [authChecked, setAuthChecked] = useState(false)
+  const [availableStrategies, setAvailableStrategies] = useState<Record<string, StrategyMeta>>({})
+  const [showStrategySelector, setShowStrategySelector] = useState(false)
 
   // Auth guard: redirect to /auth if not authenticated
   useEffect(() => {
@@ -154,11 +208,12 @@ export default function StrategyPage() {
 
   const fetchAll = useCallback(async () => {
     try {
-      const [statusRes, perfRes, summaryRes, tradesRes] = await Promise.allSettled([
+      const [statusRes, perfRes, summaryRes, tradesRes, strategiesRes] = await Promise.allSettled([
         tradingApi.getTradingStatus(),
         tradingApi.getPortfolioPerformance(),
         tradingApi.getPositionsSummary(),
         tradingApi.getTradeHistory(),
+        tradingApi.getStrategies(),
       ])
 
       if (statusRes.status === 'fulfilled') {
@@ -179,6 +234,20 @@ export default function StrategyPage() {
             qty: Number(t.quantity || t.qty || 0),
           })
         }
+      }
+      if (strategiesRes.status === 'fulfilled') {
+        // 서버 데이터와 로컬 메타를 병합
+        const serverAvailable = strategiesRes.value.available || {}
+        const merged: Record<string, StrategyMeta> = {}
+        Object.keys(serverAvailable).forEach((key) => {
+          merged[key] = STRATEGY_META[key] || {
+            name: serverAvailable[key].name || key,
+            description: serverAvailable[key].description || '',
+            icon: 'smart_toy',
+            badge: key,
+          }
+        })
+        setAvailableStrategies(merged)
       }
     } catch {
       // keep existing data
@@ -204,8 +273,9 @@ export default function StrategyPage() {
 
   const isActive = status?.is_active || false
   const strategyKey = status?.strategy || 'regime_trend'
-  const strategyName = STRATEGY_NAMES[strategyKey] || strategyKey
-  const description = STRATEGY_DESCRIPTIONS[strategyKey] || 'Automated trading strategy.'
+  const currentMeta = STRATEGY_META[strategyKey] || { name: strategyKey, description: 'Automated trading strategy.', icon: 'smart_toy', badge: strategyKey }
+  const strategyName = currentMeta.name
+  const description = currentMeta.description
   const params = status?.parameters || {}
   const paramDescs = status?.parameter_descriptions || {}
 
@@ -240,6 +310,24 @@ export default function StrategyPage() {
       setErrorMsg(e?.response?.data?.detail || 'Failed to stop trading')
     } finally {
       setIsSubmitting(false)
+    }
+  }
+
+  const handleChangeStrategy = async (strategyKey: string) => {
+    if (isActive) return
+    setErrorMsg(null)
+    setSuccessMsg(null)
+    setIsChangingStrategy(true)
+    try {
+      await tradingApi.changeStrategy(strategyKey)
+      await fetchAll()
+      setShowStrategySelector(false)
+      setSuccessMsg(`Strategy changed to ${STRATEGY_META[strategyKey]?.name || strategyKey}`)
+      setTimeout(() => setSuccessMsg(null), 3000)
+    } catch (e: any) {
+      setErrorMsg(e?.response?.data?.detail || 'Failed to change strategy')
+    } finally {
+      setIsChangingStrategy(false)
     }
   }
 
@@ -361,6 +449,84 @@ export default function StrategyPage() {
             {errorMsg}
           </div>
         )}
+        {successMsg && (
+          <div className="bg-success/10 border border-success/30 text-success text-sm rounded-lg px-4 py-3 flex items-center gap-2">
+            <span className="material-icons-round text-base">check_circle</span>
+            {successMsg}
+          </div>
+        )}
+
+        {/* Strategy Selector */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between px-1">
+            <h3 className="text-sm font-semibold text-slate-300">Active Strategy</h3>
+            {!isActive && (
+              <button
+                onClick={() => setShowStrategySelector((v) => !v)}
+                className="text-xs text-primary font-semibold flex items-center gap-1 hover:text-primary/80 transition-colors"
+              >
+                <span className="material-icons-round text-sm">{showStrategySelector ? 'expand_less' : 'swap_horiz'}</span>
+                {showStrategySelector ? 'Cancel' : 'Change'}
+              </button>
+            )}
+            {isActive && (
+              <span className="text-xs text-slate-500">Stop trading to change strategy</span>
+            )}
+          </div>
+
+          {/* Current strategy card */}
+          <div className="glass-panel rounded-xl p-4 border border-primary/20 flex items-center gap-4">
+            <div className="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center text-primary flex-shrink-0">
+              <span className="material-icons-round text-xl">{currentMeta.icon}</span>
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-bold text-white">{strategyName}</p>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-primary/20 text-primary uppercase tracking-wide">
+                  {currentMeta.badge}
+                </span>
+              </div>
+              <p className="text-xs text-slate-400 mt-0.5 line-clamp-1">{description}</p>
+            </div>
+            <span className="material-icons-round text-primary text-xl">check_circle</span>
+          </div>
+
+          {/* Strategy picker (shown when not active and toggled) */}
+          {showStrategySelector && !isActive && (
+            <div className="bg-surface rounded-xl border border-white/5 divide-y divide-white/5 overflow-hidden">
+              {Object.entries(availableStrategies).map(([key, meta]) => {
+                const isCurrent = key === strategyKey
+                return (
+                  <button
+                    key={key}
+                    onClick={() => !isCurrent && handleChangeStrategy(key)}
+                    disabled={isCurrent || isChangingStrategy}
+                    className={`w-full p-4 flex items-center gap-4 text-left transition-colors
+                      ${isCurrent ? 'bg-primary/10 cursor-default' : 'hover:bg-white/5 cursor-pointer'}
+                      disabled:opacity-60`}
+                  >
+                    <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0
+                      ${isCurrent ? 'bg-primary/20 text-primary' : 'bg-background-dark text-slate-500'}`}>
+                      <span className="material-icons-round text-lg">{meta.icon}</span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className={`text-sm font-semibold ${isCurrent ? 'text-primary' : 'text-white'}`}>{meta.name}</p>
+                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wide
+                          ${isCurrent ? 'bg-primary/20 text-primary' : 'bg-white/5 text-slate-400'}`}>
+                          {meta.badge}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-500 mt-0.5 line-clamp-2">{meta.description}</p>
+                    </div>
+                    {isCurrent && <span className="material-icons-round text-primary text-lg">radio_button_checked</span>}
+                    {!isCurrent && isChangingStrategy && <div className="w-4 h-4 border border-primary border-t-transparent rounded-full animate-spin" />}
+                  </button>
+                )
+              })}
+            </div>
+          )}
+        </div>
 
         {/* Controls */}
         <div className="bg-surface rounded-lg p-1.5 grid grid-cols-2 gap-2 shadow-inner border border-white/5">

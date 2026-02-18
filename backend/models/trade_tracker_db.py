@@ -9,6 +9,22 @@ import aiosqlite
 
 
 SCHEMA = """
+CREATE TABLE IF NOT EXISTS signal_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts TEXT DEFAULT (datetime('now')),
+    symbol TEXT NOT NULL,
+    strategy TEXT NOT NULL,
+    signal TEXT NOT NULL,
+    reason TEXT,
+    close REAL,
+    indicators_json TEXT,
+    trailing_stop REAL,
+    in_position INTEGER DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_signal_log_ts ON signal_log(ts DESC);
+CREATE INDEX IF NOT EXISTS idx_signal_log_strategy ON signal_log(strategy, ts DESC);
+
 CREATE TABLE IF NOT EXISTS trades (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     ts TEXT DEFAULT (datetime('now')),
@@ -91,6 +107,97 @@ class TradeTrackerDB:
         if position_type == "short":
             return (entry_price - current_price) * quantity
         return (current_price - entry_price) * quantity
+
+    async def add_signal_log(
+        self,
+        symbol: str,
+        strategy: str,
+        signal: str,
+        reason: str = "",
+        indicators: Optional[Dict[str, float]] = None,
+        trailing_stop: Optional[float] = None,
+        in_position: bool = False,
+    ) -> None:
+        """매 전략 루프마다 신호 및 지표값 기록 (퀀트 분석용)"""
+        await self._init()
+        close = float(indicators.get("close", 0.0)) if indicators else 0.0
+        indicators_json = json.dumps(indicators or {}, ensure_ascii=True)
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute(
+                """
+                INSERT INTO signal_log(symbol, strategy, signal, reason, close, indicators_json, trailing_stop, in_position)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (symbol, strategy, signal, reason, close, indicators_json, trailing_stop, int(in_position)),
+            )
+            await db.commit()
+
+    async def get_signal_logs(
+        self,
+        strategy: Optional[str] = None,
+        symbol: Optional[str] = None,
+        limit: int = 200,
+        signal_filter: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """signal_log 조회 (전략 분석용)"""
+        await self._init()
+        clauses = []
+        params: List[Any] = []
+        if strategy:
+            clauses.append("strategy = ?")
+            params.append(strategy)
+        if symbol:
+            clauses.append("symbol = ?")
+            params.append(symbol)
+        if signal_filter:
+            clauses.append("signal = ?")
+            params.append(signal_filter)
+        where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        params.append(limit)
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute(
+                f"SELECT * FROM signal_log {where} ORDER BY ts DESC LIMIT ?",
+                tuple(params),
+            )
+            rows = await cursor.fetchall()
+        result = []
+        for row in rows:
+            d = dict(row)
+            try:
+                d["indicators"] = json.loads(d.get("indicators_json") or "{}")
+            except Exception:
+                d["indicators"] = {}
+            result.append(d)
+        return result
+
+    async def get_signal_log_stats(self, strategy: Optional[str] = None) -> Dict[str, Any]:
+        """전략별 신호 통계 (퀀트 분석용)"""
+        await self._init()
+        where = "WHERE strategy = ?" if strategy else ""
+        params = (strategy,) if strategy else ()
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute(
+                f"""
+                SELECT strategy, signal, COUNT(*) as cnt
+                FROM signal_log {where}
+                GROUP BY strategy, signal
+                ORDER BY strategy, cnt DESC
+                """,
+                params,
+            )
+            rows = await cursor.fetchall()
+            cursor2 = await db.execute(
+                f"SELECT COUNT(*) as total FROM signal_log {where}",
+                params,
+            )
+            total_row = await cursor2.fetchone()
+        stats: Dict[str, Any] = {"total": int(total_row["total"]) if total_row else 0, "by_signal": {}}
+        for row in rows:
+            key = f"{row['strategy']}:{row['signal']}"
+            stats["by_signal"][key] = int(row["cnt"])
+        return stats
 
     async def add_trade(
         self,
