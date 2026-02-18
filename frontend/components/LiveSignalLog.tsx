@@ -113,7 +113,7 @@ export default function LiveSignalLog() {
   }, [signals])
 
   return (
-    <div className="bg-card-darker rounded-xl border border-slate-800 shadow-inner flex flex-col h-[400px] lg:h-full relative overflow-hidden">
+    <div className="bg-card-darker rounded-xl border border-slate-800 shadow-inner flex flex-col h-[480px] relative overflow-hidden">
       {/* Header */}
       <div className="px-4 py-3 bg-slate-800/50 border-b border-slate-800 flex justify-between items-center">
         <div className="flex items-center gap-2">

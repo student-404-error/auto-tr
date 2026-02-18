@@ -397,22 +397,70 @@ async def get_recent_signals(request: Request, limit: int = 5):
                 "message": msg,
             })
 
-            # 인디케이터 정보 (값이 있을 때만)
+            # 인디케이터 정보 — 전략별 동적 포매팅
+            strategy_key = status.get("strategy", "")
             if indicators:
                 close_v = float(indicators.get("close") or 0.0)
-                ema_fast_v = float(indicators.get("ema_fast") or 0.0)
-                ema_slow_v = float(indicators.get("ema_slow") or 0.0)
-                gap_v = float(indicators.get("trend_gap_pct") or 0.0)
                 atr_v = float(indicators.get("atr") or 0.0)
-                normalized.insert(1, {
-                    "timestamp": datetime.utcnow().isoformat(),
-                    "type": "info",
-                    "message": (
+
+                if strategy_key == "regime_trend":
+                    ema_fast_v = float(indicators.get("ema_fast") or 0.0)
+                    ema_slow_v = float(indicators.get("ema_slow") or 0.0)
+                    gap_v = float(indicators.get("trend_gap_pct") or 0.0)
+                    ind_msg = (
                         f"close={close_v:.2f}  "
                         f"EMA({ema_fast_v:.2f}/{ema_slow_v:.2f})  "
                         f"gap={gap_v * 100:.3f}%  "
                         f"ATR={atr_v:.2f}"
-                    ),
+                    )
+
+                elif strategy_key == "breakout_volume":
+                    prior_high_v = float(indicators.get("prior_high") or 0.0)
+                    volume_v = float(indicators.get("volume") or 0.0)
+                    volume_ma_v = float(indicators.get("volume_ma") or 0.0)
+                    vol_ratio = (volume_v / volume_ma_v) if volume_ma_v > 0 else 0.0
+                    breakout = close_v > prior_high_v
+                    ind_msg = (
+                        f"close={close_v:.2f}  "
+                        f"high={prior_high_v:.2f}  "
+                        f"{'✓breakout' if breakout else '✗no-break'}  "
+                        f"vol={vol_ratio:.2f}x MA  "
+                        f"ATR={atr_v:.2f}"
+                    )
+
+                elif strategy_key == "mean_reversion":
+                    rsi_v = float(indicators.get("rsi") or 0.0)
+                    bb_upper_v = float(indicators.get("bb_upper") or 0.0)
+                    bb_mid_v = float(indicators.get("bb_mid") or 0.0)
+                    bb_lower_v = float(indicators.get("bb_lower") or 0.0)
+                    ind_msg = (
+                        f"close={close_v:.2f}  "
+                        f"RSI={rsi_v:.1f}  "
+                        f"BB[{bb_lower_v:.2f}/{bb_mid_v:.2f}/{bb_upper_v:.2f}]  "
+                        f"ATR={atr_v:.2f}"
+                    )
+
+                elif strategy_key == "dual_timeframe":
+                    rsi_v = float(indicators.get("rsi") or 0.0)
+                    ema_v = float(indicators.get("ema") or 0.0)
+                    htf_bullish = bool(indicators.get("htf_bullish", 0))
+                    ind_msg = (
+                        f"close={close_v:.2f}  "
+                        f"RSI={rsi_v:.1f}  "
+                        f"EMA={ema_v:.2f}  "
+                        f"HTF={'↑bull' if htf_bullish else '↓bear'}  "
+                        f"ATR={atr_v:.2f}"
+                    )
+
+                else:
+                    # 알 수 없는 전략: key=value 나열
+                    parts = [f"{k}={float(v):.4g}" for k, v in indicators.items()]
+                    ind_msg = "  ".join(parts)
+
+                normalized.insert(1, {
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "type": "info",
+                    "message": ind_msg,
                 })
             elif is_active:
                 # 전략은 실행 중이지만 아직 첫 루프 미완료
