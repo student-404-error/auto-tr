@@ -98,6 +98,7 @@ class RegimeTrendStrategy:
         logger.info("RegimeTrendStrategy initialized with params=%s", self.params.to_dict())
 
     async def start_trading(self):
+        await self._restore_state_from_db()
         self.is_active = True
         logger.info("RegimeTrendStrategy started")
 
@@ -216,6 +217,29 @@ class RegimeTrendStrategy:
         self.trailing_stop = None
         self.bars_since_trade = 0
         logger.info("SELL executed qty=%s price=%.4f", sold_qty, decision.close_price)
+
+    async def _restore_state_from_db(self):
+        """Restore in-memory position state from persisted trades."""
+        try:
+            positions = await self.trade_tracker.get_current_positions()
+            symbol_positions = positions.get(self.params.symbol, {})
+            spot_position = symbol_positions.get("spot", {})
+            qty = float(spot_position.get("total_quantity", 0.0))
+
+            if qty > 0:
+                self.position = "long"
+                self.trade_amount = f"{qty:.8f}".rstrip("0").rstrip(".")
+                logger.info(
+                    "Restored strategy state from DB: symbol=%s qty=%s position=long",
+                    self.params.symbol,
+                    self.trade_amount,
+                )
+            else:
+                self.position = None
+                self.trade_amount = None
+                logger.info("No open DB position for %s; state restored as flat", self.params.symbol)
+        except Exception as exc:
+            logger.warning("Failed to restore strategy state: %s", exc)
 
     def get_strategy_status(self) -> Dict[str, Any]:
         return {

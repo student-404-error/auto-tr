@@ -25,6 +25,7 @@ class TradingStrategy:
     
     async def start_trading(self):
         """자동매매 시작"""
+        await self._restore_state_from_db()
         self.is_active = True
         print("🤖 자동매매 시작됨")
         
@@ -173,6 +174,22 @@ class TradingStrategy:
 
         except Exception as e:
             print(f"거래 실행 오류: {e}")
+
+    async def _restore_state_from_db(self):
+        """DB 거래 기록 기반으로 메모리 포지션 상태 복원."""
+        try:
+            positions = await self.trade_tracker.get_current_positions()
+            symbol_positions = positions.get("BTCUSDT", {})
+            spot = symbol_positions.get("spot", {})
+            qty = float(spot.get("total_quantity", 0.0))
+            if qty > 0:
+                self.position = "long"
+                self.trade_amount = f"{qty:.8f}".rstrip("0").rstrip(".")
+            else:
+                self.position = None
+                self.trade_amount = None
+        except Exception as e:
+            print(f"상태 복원 오류: {e}")
     
     def get_strategy_status(self) -> Dict[str, Any]:
         """전략 상태 반환"""

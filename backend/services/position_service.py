@@ -1,451 +1,284 @@
-from typing import Dict, List, Any, Optional, Literal
-from datetime import datetime
-import asyncio
-from models.position_manager import PositionManager, Position, PositionType, PositionStatus
-from models.enhanced_trade import EnhancedTradeTracker, EnhancedTrade
+import os
 import logging
+from datetime import datetime
+from typing import Dict, List, Any, Optional
+
+from models.trade_tracker_db import TradeTrackerDB
 
 logger = logging.getLogger(__name__)
 
+
 class PositionService:
-    """Position tracking backend service with P&L calculation and management"""
-    
-    def __init__(self, position_manager: PositionManager, trade_tracker: EnhancedTradeTracker):
-        self.position_manager = position_manager
-        self.trade_tracker = trade_tracker
-        self.current_prices: Dict[str, float] = {}
-        
-        logger.info("PositionService initialized")
-    
+    """SQLite-backed position management with optional live execution."""
+
+    def __init__(self, trade_db: TradeTrackerDB):
+        self.trade_db = trade_db
+        self.paper_trading = os.getenv("PAPER_TRADING", "false").lower() == "true"
+        logger.info("PositionService initialized (paper_trading=%s)", self.paper_trading)
+
     async def open_position(
         self,
         symbol: str,
-        position_type: PositionType,
+        position_type: str,
         entry_price: float,
         quantity: float,
         dollar_amount: float,
-        trading_client=None
+        trading_client=None,
     ) -> Dict[str, Any]:
-        """
-        Open a new position and record the entry trade
-        
-        Args:
-            symbol: Trading symbol (e.g., 'BTCUSDT')
-            position_type: 'long' or 'short'
-            entry_price: Entry price for the position
-            quantity: Quantity of the asset
-            dollar_amount: Dollar amount invested
-            trading_client: Optional trading client for real orders
-            
-        Returns:
-            Dict containing position data and trade record
-        """
         try:
-            # Record the entry trade
-            entry_trade = await asyncio.to_thread(
-                self.trade_tracker.add_trade,
+            exchange_order_id: Optional[str] = None
+
+            if not self.paper_trading and trading_client:
+                if position_type == "short":
+                    return {
+                        "success": False,
+                        "error": "short_not_supported",
+                        "message": "Spot short is not supported for live execution.",
+                    }
+
+                side = "Buy" if position_type == "long" else "Sell"
+                result = await trading_client.place_order(
+                    symbol=symbol,
+                    side=side,
+                    qty=f"{quantity}",
+                )
+                if not result.get("success"):
+                    return {
+                        "success": False,
+                        "error": result.get("error", "order_failed"),
+                        "message": "Exchange order failed; no local position stored.",
+                    }
+                exchange_order_id = result.get("order_id")
+                market_price = await trading_client.get_current_price(symbol)
+                if market_price > 0:
+                    entry_price = float(market_price)
+
+            entry_trade = await self.trade_db.add_trade(
                 symbol=symbol,
-                side='buy' if position_type == 'long' else 'sell',
-                position_type=position_type,
-                quantity=quantity,
+                side="Buy" if position_type == "long" else "Sell",
+                qty=quantity,
                 price=entry_price,
+                signal="position_open",
+                position_type=position_type,
                 dollar_amount=dollar_amount,
-                signal='position_open',
-                status='filled',
+                status="filled",
+                order_id=exchange_order_id,
             )
-            
-            # Create the position
-            position = await asyncio.to_thread(
-                self.position_manager.open_position,
+
+            position = await self.trade_db.create_position(
                 symbol=symbol,
                 position_type=position_type,
                 entry_price=entry_price,
                 quantity=quantity,
                 dollar_amount=dollar_amount,
-                current_price=entry_price,
-                entry_trade_id=entry_trade.id,
+                entry_trade_id=entry_trade["id"],
             )
-            
-            logger.info(f"Position opened: {symbol} {position_type} - ID: {position.id}")
-            
+
             return {
                 "success": True,
-                "position": position.to_dict(),
-                "entry_trade": entry_trade.to_dict(),
-                "message": f"Position opened: {symbol} {position_type}"
+                "position": position,
+                "entry_trade": entry_trade,
+                "exchange_order_id": exchange_order_id,
+                "message": f"Position opened: {symbol} {position_type}",
             }
-            
         except Exception as e:
-            logger.error(f"Failed to open position: {e}")
+            logger.error("Failed to open position: %s", e)
             return {
                 "success": False,
                 "error": str(e),
-                "message": "Failed to open position"
+                "message": "Failed to open position",
             }
-    
+
     async def close_position(
         self,
         position_id: str,
         close_price: Optional[float] = None,
-        trading_client=None
+        trading_client=None,
     ) -> Dict[str, Any]:
-        """
-        Close an existing position and record the exit trade
-        
-        Args:
-            position_id: ID of the position to close
-            close_price: Price at which to close (if None, uses current market price)
-            trading_client: Optional trading client for real orders
-            
-        Returns:
-            Dict containing closed position data and exit trade record
-        """
         try:
-            # Get the position
-            position = self.position_manager.get_position_by_id(position_id)
+            position = await self.trade_db.get_position_by_id(position_id)
             if not position:
                 return {
                     "success": False,
                     "error": "Position not found",
-                    "message": f"Position {position_id} not found"
+                    "message": f"Position {position_id} not found",
                 }
-            
-            if position.status != 'open':
+            if position.get("status") != "open":
                 return {
                     "success": False,
                     "error": "Position already closed",
-                    "message": f"Position {position_id} is already closed"
+                    "message": f"Position {position_id} is already closed",
                 }
-            
-            # Use current price if close_price not provided
+
             if close_price is None:
-                close_price = self.current_prices.get(position.symbol, position.current_price)
-            
-            # Update position with current price before closing
-            position.update_current_price(close_price)
-            
-            # Calculate final P&L
-            final_pnl = position.unrealized_pnl
-            final_pnl_percent = position.unrealized_pnl_percent
-            
-            # Record the exit trade
-            exit_trade = await asyncio.to_thread(
-                self.trade_tracker.add_trade,
-                symbol=position.symbol,
-                side='sell' if position.position_type == 'long' else 'buy',
-                position_type=position.position_type,
-                quantity=position.quantity,
-                price=close_price,
-                dollar_amount=position.quantity * close_price,
-                signal='position_close',
-                status='filled',
+                if trading_client:
+                    close_price = await trading_client.get_current_price(position["symbol"])
+                else:
+                    close_price = float(position["current_price"])
+
+            exchange_order_id: Optional[str] = None
+            if not self.paper_trading and trading_client:
+                side = "Sell" if position["position_type"] == "long" else "Buy"
+                result = await trading_client.place_order(
+                    symbol=position["symbol"],
+                    side=side,
+                    qty=f"{position['quantity']}",
+                )
+                if not result.get("success"):
+                    return {
+                        "success": False,
+                        "error": result.get("error", "order_failed"),
+                        "message": "Exchange close order failed; local position unchanged.",
+                    }
+                exchange_order_id = result.get("order_id")
+
+            exit_trade = await self.trade_db.add_trade(
+                symbol=position["symbol"],
+                side="Sell" if position["position_type"] == "long" else "Buy",
+                qty=float(position["quantity"]),
+                price=float(close_price),
+                signal="position_close",
+                position_type=position["position_type"],
+                dollar_amount=float(position["quantity"]) * float(close_price),
+                status="filled",
+                order_id=exchange_order_id,
             )
-            
-            # Close the position
-            closed_position = await asyncio.to_thread(
-                self.position_manager.close_position, position_id, exit_trade.id
+
+            closed_position = await self.trade_db.close_position(
+                position_id=position_id,
+                close_price=float(close_price),
+                exit_trade_id=exit_trade["id"],
             )
-            
-            logger.info(f"Position closed: {position.symbol} {position.position_type} - P&L: ${final_pnl:.2f}")
-            
+
             return {
                 "success": True,
-                "position": closed_position.to_dict() if closed_position else None,
-                "exit_trade": exit_trade.to_dict(),
-                "final_pnl": final_pnl,
-                "final_pnl_percent": final_pnl_percent,
-                "message": f"Position closed with P&L: ${final_pnl:.2f} ({final_pnl_percent:.2f}%)"
+                "position": closed_position,
+                "exit_trade": exit_trade,
+                "exchange_order_id": exchange_order_id,
+                "final_pnl": closed_position.get("unrealized_pnl") if closed_position else 0,
+                "final_pnl_percent": closed_position.get("unrealized_pnl_percent") if closed_position else 0,
+                "message": "Position closed",
             }
-            
         except Exception as e:
-            logger.error(f"Failed to close position: {e}")
+            logger.error("Failed to close position: %s", e)
             return {
                 "success": False,
                 "error": str(e),
-                "message": "Failed to close position"
+                "message": "Failed to close position",
             }
-    
-    async def update_position_prices(self, price_updates: Dict[str, float]):
-        """
-        Update current prices for all positions
-        
-        Args:
-            price_updates: Dict mapping symbol to current price
-        """
+
+    async def update_position_prices(self, price_updates: Dict[str, float]) -> Dict[str, Any]:
         try:
-            self.current_prices.update(price_updates)
-            
-            for symbol, price in price_updates.items():
-                await asyncio.to_thread(self.position_manager.update_positions_price, symbol, price)
-            
-            logger.debug(f"Updated prices for {len(price_updates)} symbols")
-            
+            updated_count = await self.trade_db.update_open_position_prices(price_updates)
+            return {"success": True, "updated_count": updated_count}
         except Exception as e:
-            logger.error(f"Failed to update position prices: {e}")
-    
-    def get_open_positions(self, symbol: Optional[str] = None) -> List[Dict[str, Any]]:
-        """
-        Get all open positions with current P&L
-        
-        Args:
-            symbol: Optional symbol filter
-            
-        Returns:
-            List of position dictionaries with current P&L
-        """
-        try:
-            open_positions = self.position_manager.get_open_positions(symbol)
-            
-            # Enhance with current P&L calculations
-            enhanced_positions = []
-            for position in open_positions:
-                position_dict = position.to_dict()
-                
-                # Add additional calculated fields
-                position_dict.update({
-                    "current_value": position.quantity * position.current_price,
-                    "invested_value": position.dollar_amount,
-                    "pnl_color": "green" if position.unrealized_pnl >= 0 else "red",
-                    "days_open": self._calculate_days_open(position.open_time),
-                    "entry_date": position.open_time[:10],  # YYYY-MM-DD format
-                })
-                
-                enhanced_positions.append(position_dict)
-            
-            return enhanced_positions
-            
-        except Exception as e:
-            logger.error(f"Failed to get open positions: {e}")
-            return []
-    
-    def get_closed_positions(self, symbol: Optional[str] = None, limit: int = 50) -> List[Dict[str, Any]]:
-        """
-        Get closed positions with realized P&L
-        
-        Args:
-            symbol: Optional symbol filter
-            limit: Maximum number of positions to return
-            
-        Returns:
-            List of closed position dictionaries
-        """
-        try:
-            closed_positions = self.position_manager.get_closed_positions(symbol)
-            
-            # Sort by close time (most recent first) and limit
-            closed_positions.sort(key=lambda x: x.close_time or "", reverse=True)
-            closed_positions = closed_positions[:limit]
-            
-            # Enhance with additional data
-            enhanced_positions = []
-            for position in closed_positions:
-                position_dict = position.to_dict()
-                
-                # Calculate realized P&L (final P&L when closed)
-                realized_pnl = position.unrealized_pnl  # This is the final P&L when position was closed
-                
-                position_dict.update({
-                    "realized_pnl": realized_pnl,
-                    "realized_pnl_percent": position.unrealized_pnl_percent,
-                    "pnl_color": "green" if realized_pnl >= 0 else "red",
-                    "days_held": self._calculate_days_held(position.open_time, position.close_time),
-                    "entry_date": position.open_time[:10],
-                    "exit_date": position.close_time[:10] if position.close_time else None,
-                })
-                
-                enhanced_positions.append(position_dict)
-            
-            return enhanced_positions
-            
-        except Exception as e:
-            logger.error(f"Failed to get closed positions: {e}")
-            return []
-    
-    def get_position_summary(self, symbol: Optional[str] = None) -> Dict[str, Any]:
-        """
-        Get comprehensive position summary with statistics
-        
-        Args:
-            symbol: Optional symbol filter
-            
-        Returns:
-            Dict containing position summary and statistics
-        """
-        try:
-            # Get basic summary from position manager
-            summary = self.position_manager.get_positions_summary(symbol)
-            
-            # Get open and closed positions for additional calculations
-            open_positions = self.get_open_positions(symbol)
-            closed_positions = self.get_closed_positions(symbol)
-            
-            # Calculate additional statistics
-            total_positions = len(open_positions) + len(closed_positions)
-            winning_positions = len([p for p in closed_positions if p.get("realized_pnl", 0) > 0])
-            losing_positions = len([p for p in closed_positions if p.get("realized_pnl", 0) < 0])
-            
-            win_rate = (winning_positions / len(closed_positions) * 100) if closed_positions else 0
-            
-            # Calculate average holding period
-            avg_holding_days = 0
-            if closed_positions:
-                total_days = sum([p.get("days_held", 0) for p in closed_positions])
-                avg_holding_days = total_days / len(closed_positions)
-            
-            # Enhance summary with additional statistics
-            summary.update({
-                "statistics": {
-                    "total_positions": total_positions,
-                    "winning_positions": winning_positions,
-                    "losing_positions": losing_positions,
-                    "win_rate": round(win_rate, 2),
-                    "avg_holding_days": round(avg_holding_days, 1),
-                    "total_realized_pnl": sum([p.get("realized_pnl", 0) for p in closed_positions]),
-                    "best_trade": max([p.get("realized_pnl", 0) for p in closed_positions]) if closed_positions else 0,
-                    "worst_trade": min([p.get("realized_pnl", 0) for p in closed_positions]) if closed_positions else 0,
-                },
-                "open_positions": open_positions,
-                "recent_closed_positions": closed_positions[:10]  # Last 10 closed positions
-            })
-            
-            return summary
-            
-        except Exception as e:
-            logger.error(f"Failed to get position summary: {e}")
-            return {
-                "open_positions_count": 0,
-                "closed_positions_count": 0,
-                "total_unrealized_pnl": 0,
-                "total_invested": 0,
-                "realized_pnl": 0,
-                "statistics": {},
-                "open_positions": [],
-                "recent_closed_positions": []
-            }
-    
-    def get_position_by_id(self, position_id: str) -> Optional[Dict[str, Any]]:
-        """
-        Get detailed information for a specific position
-        
-        Args:
-            position_id: Position ID
-            
-        Returns:
-            Position dictionary with detailed information or None
-        """
-        try:
-            position = self.position_manager.get_position_by_id(position_id)
-            if not position:
-                return None
-            
-            position_dict = position.to_dict()
-            
-            # Add related trades
-            entry_trade = None
-            exit_trade = None
-            
-            if position.entry_trade_id:
-                for trade in self.trade_tracker.trades:
-                    if trade.id == position.entry_trade_id:
-                        entry_trade = trade.to_dict()
-                        break
-            
-            if position.exit_trade_id:
-                for trade in self.trade_tracker.trades:
-                    if trade.id == position.exit_trade_id:
-                        exit_trade = trade.to_dict()
-                        break
-            
-            position_dict.update({
-                "entry_trade": entry_trade,
-                "exit_trade": exit_trade,
-                "current_value": position.quantity * position.current_price,
-                "invested_value": position.dollar_amount,
-                "pnl_color": "green" if position.unrealized_pnl >= 0 else "red",
-                "days_open_or_held": (
-                    self._calculate_days_open(position.open_time) if position.status == 'open'
-                    else self._calculate_days_held(position.open_time, position.close_time)
-                )
-            })
-            
-            return position_dict
-            
-        except Exception as e:
-            logger.error(f"Failed to get position by ID: {e}")
+            logger.error("Failed to update position prices: %s", e)
+            return {"success": False, "error": str(e), "updated_count": 0}
+
+    async def get_open_positions(self, symbol: Optional[str] = None) -> List[Dict[str, Any]]:
+        positions = await self.trade_db.get_positions(status="open", symbol=symbol, limit=1000)
+        return [self._with_derived_fields(p) for p in positions]
+
+    async def get_closed_positions(self, symbol: Optional[str] = None, limit: int = 50) -> List[Dict[str, Any]]:
+        positions = await self.trade_db.get_positions(status="closed", symbol=symbol, limit=limit)
+        return [self._with_derived_fields(p) for p in positions]
+
+    async def get_position_summary(self, symbol: Optional[str] = None) -> Dict[str, Any]:
+        summary = await self.trade_db.get_position_summary(symbol)
+        summary["open_positions"] = [self._with_derived_fields(p) for p in summary.get("open_positions", [])]
+        summary["recent_closed_positions"] = [
+            self._with_derived_fields(p) for p in summary.get("recent_closed_positions", [])
+        ]
+        return summary
+
+    async def get_position_by_id(self, position_id: str) -> Optional[Dict[str, Any]]:
+        position = await self.trade_db.get_position_by_id(position_id)
+        if not position:
             return None
-    
-    def _calculate_days_open(self, open_time: str) -> int:
-        """Calculate days since position was opened"""
-        try:
-            open_dt = datetime.fromisoformat(open_time.replace('Z', '+00:00'))
-            now = datetime.now(open_dt.tzinfo) if open_dt.tzinfo else datetime.now()
-            return (now - open_dt).days
-        except:
-            return 0
-    
-    def _calculate_days_held(self, open_time: str, close_time: Optional[str]) -> int:
-        """Calculate days position was held"""
-        try:
-            if not close_time:
-                return 0
-            
-            open_dt = datetime.fromisoformat(open_time.replace('Z', '+00:00'))
-            close_dt = datetime.fromisoformat(close_time.replace('Z', '+00:00'))
-            return (close_dt - open_dt).days
-        except:
-            return 0
-    
+
+        entry_trade = None
+        exit_trade = None
+        if position.get("entry_trade_id"):
+            entry_trade = await self.trade_db.get_trade_by_id(int(position["entry_trade_id"]))
+        if position.get("exit_trade_id"):
+            exit_trade = await self.trade_db.get_trade_by_id(int(position["exit_trade_id"]))
+
+        pos = self._with_derived_fields(position)
+        pos["entry_trade"] = entry_trade
+        pos["exit_trade"] = exit_trade
+        return pos
+
     async def auto_close_positions_by_criteria(
         self,
         symbol: Optional[str] = None,
         max_loss_percent: Optional[float] = None,
         min_profit_percent: Optional[float] = None,
-        max_days_open: Optional[int] = None
+        max_days_open: Optional[int] = None,
+        trading_client=None,
     ) -> List[Dict[str, Any]]:
-        """
-        Automatically close positions based on specified criteria
-        
-        Args:
-            symbol: Optional symbol filter
-            max_loss_percent: Close positions with loss >= this percentage
-            min_profit_percent: Close positions with profit >= this percentage  
-            max_days_open: Close positions open for >= this many days
-            
-        Returns:
-            List of closed position results
-        """
+        open_positions = await self.get_open_positions(symbol)
+        closed_results = []
+
+        for position in open_positions:
+            should_close = False
+            close_reason = ""
+            pnl_pct = float(position.get("unrealized_pnl_percent") or 0.0)
+
+            if max_loss_percent is not None and pnl_pct <= -abs(max_loss_percent):
+                should_close = True
+                close_reason = f"Stop loss: {pnl_pct:.2f}%"
+            elif min_profit_percent is not None and pnl_pct >= min_profit_percent:
+                should_close = True
+                close_reason = f"Take profit: {pnl_pct:.2f}%"
+            elif max_days_open is not None and int(position.get("days_open_or_held", 0)) >= max_days_open:
+                should_close = True
+                close_reason = f"Max days reached: {position.get('days_open_or_held', 0)} days"
+
+            if should_close:
+                result = await self.close_position(position["id"], trading_client=trading_client)
+                result["close_reason"] = close_reason
+                closed_results.append(result)
+
+        return closed_results
+
+    def _with_derived_fields(self, position: Dict[str, Any]) -> Dict[str, Any]:
+        p = dict(position)
+        quantity = float(p.get("quantity") or 0.0)
+        current_price = float(p.get("current_price") or 0.0)
+        dollar_amount = float(p.get("dollar_amount") or 0.0)
+        pnl = float(p.get("unrealized_pnl") or 0.0)
+        p["current_value"] = quantity * current_price
+        p["invested_value"] = dollar_amount
+        p["pnl_color"] = "green" if pnl >= 0 else "red"
+
+        if p.get("status") == "closed":
+            p["days_open_or_held"] = self._calculate_days_held(p.get("open_time"), p.get("close_time"))
+            p["entry_date"] = (p.get("open_time") or "")[:10]
+            p["exit_date"] = (p.get("close_time") or "")[:10] if p.get("close_time") else None
+            p["realized_pnl"] = pnl
+            p["realized_pnl_percent"] = float(p.get("unrealized_pnl_percent") or 0.0)
+        else:
+            p["days_open_or_held"] = self._calculate_days_open(p.get("open_time"))
+            p["entry_date"] = (p.get("open_time") or "")[:10]
+
+        return p
+
+    def _calculate_days_open(self, open_time: Optional[str]) -> int:
+        if not open_time:
+            return 0
         try:
-            open_positions = self.position_manager.get_open_positions(symbol)
-            closed_results = []
-            
-            for position in open_positions:
-                should_close = False
-                close_reason = ""
-                
-                # Check loss threshold
-                if max_loss_percent and position.unrealized_pnl_percent <= -abs(max_loss_percent):
-                    should_close = True
-                    close_reason = f"Stop loss: {position.unrealized_pnl_percent:.2f}%"
-                
-                # Check profit threshold
-                elif min_profit_percent and position.unrealized_pnl_percent >= min_profit_percent:
-                    should_close = True
-                    close_reason = f"Take profit: {position.unrealized_pnl_percent:.2f}%"
-                
-                # Check days open threshold
-                elif max_days_open and self._calculate_days_open(position.open_time) >= max_days_open:
-                    should_close = True
-                    close_reason = f"Max days reached: {self._calculate_days_open(position.open_time)} days"
-                
-                if should_close:
-                    result = await self.close_position(position.id)
-                    result["close_reason"] = close_reason
-                    closed_results.append(result)
-                    
-                    logger.info(f"Auto-closed position {position.id}: {close_reason}")
-            
-            return closed_results
-            
-        except Exception as e:
-            logger.error(f"Failed to auto-close positions: {e}")
-            return []
+            open_dt = datetime.fromisoformat(open_time.replace("Z", "+00:00"))
+            now = datetime.now(open_dt.tzinfo) if open_dt.tzinfo else datetime.now()
+            return (now - open_dt).days
+        except Exception:
+            return 0
+
+    def _calculate_days_held(self, open_time: Optional[str], close_time: Optional[str]) -> int:
+        if not open_time or not close_time:
+            return 0
+        try:
+            open_dt = datetime.fromisoformat(open_time.replace("Z", "+00:00"))
+            close_dt = datetime.fromisoformat(close_time.replace("Z", "+00:00"))
+            return (close_dt - open_dt).days
+        except Exception:
+            return 0
