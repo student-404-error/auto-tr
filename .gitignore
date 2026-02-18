@@ -261,3 +261,7 @@ data/*.json
 # 이전 정리된 폴더들
 VibeCleanUp/
 .claude/
+# SQLite runtime files (should not be versioned)
+*.db
+*.db-wal
+*.db-shm
