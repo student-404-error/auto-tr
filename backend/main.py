@@ -26,7 +26,8 @@ app = FastAPI(title="Bitcoin Auto-Trading API", version="1.0.0")
 # CORS 설정
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=["http://localhost:3000",
+                   "https://autotr.vercel.app"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
