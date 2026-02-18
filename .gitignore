@@ -260,3 +260,4 @@ data/*.json
 
 # 이전 정리된 폴더들
 VibeCleanUp/
+.claude/

@@ -3,6 +3,7 @@ import time
 import argparse
 import logging
 from typing import List
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from dotenv import load_dotenv
 
@@ -41,13 +42,19 @@ def main():
     client = BybitClient()
     store = QuantSQLiteStore(db_path)
     collector = QuantDataCollector(client, store)
+    max_workers = int(os.getenv("DATA_PIPELINE_WORKERS", "2"))
     logger.info("Pipeline started db=%s symbols=%s intervals=%s", db_path, symbols, timeframes)
 
     while True:
         run_id = store.start_run()
         try:
-            for symbol in symbols:
-                collector.collect_symbol(symbol, timeframes)
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                futures = [
+                    executor.submit(collector.collect_symbol, symbol, timeframes)
+                    for symbol in symbols
+                ]
+                for future in as_completed(futures):
+                    future.result()
             store.end_run(run_id, "success", "cycle completed")
             logger.info("Cycle completed")
         except Exception as exc:
@@ -61,4 +68,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

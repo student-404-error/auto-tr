@@ -5,23 +5,35 @@ module.exports = {
     './components/**/*.{js,ts,jsx,tsx,mdx}',
     './app/**/*.{js,ts,jsx,tsx,mdx}',
   ],
+  darkMode: 'class',
   theme: {
     extend: {
       colors: {
-        'crypto-green': '#00D4AA',
-        'crypto-red': '#FF6B6B',
-        'crypto-blue': '#4ECDC4',
-        'crypto-gold': '#FFD700',
-        'dark-bg': '#0F172A',
-        'dark-card': '#1E293B',
-        // Default border color used by `@apply border-border` in globals.css
-        border: '#374151', // Tailwind gray-700
+        'primary': '#1e94f6',
+        'background-dark': '#101a22',
+        'card-dark': '#16202a',
+        'card-darker': '#0d141a',
+        'surface': '#18232e',
+        'surface-highlight': '#202e3b',
+        'success': '#22c55e',
+        'danger': '#ef4444',
+        'navy-bg': '#0B1120',
+        'card-navy': '#111827',
+        'electric-blue': '#2563eb',
       },
-      animation: {
-        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-      }
+      fontFamily: {
+        'display': ['Space Grotesk', 'sans-serif'],
+      },
+      fontSize: {
+        'xxs': '0.65rem',
+      },
+      boxShadow: {
+        'glow': '0 0 15px rgba(30, 148, 246, 0.3)',
+      },
+      borderRadius: {
+        'card': '12px',
+      },
     },
   },
   plugins: [],
-  darkMode: 'class',
 }

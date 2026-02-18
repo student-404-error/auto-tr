@@ -1,6 +1,9 @@
 import axios from 'axios'
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_BASE_URL ||
+  'https://api.dataquantlab.com'
+  // 'http://localhost:8000'
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -74,16 +77,6 @@ export const tradingApi = {
     return response.data
   },
 
-  // 달러 기반 주문
-  placeOrderByDollar: async (symbol: string, side: string, dollarAmount: string) => {
-    const response = await api.post('/api/order/dollar', {
-      symbol,
-      side,
-      dollarAmount
-    })
-    return response.data
-  },
-
   // 시스템 상태 조회
   getSystemStatus: async () => {
     const response = await api.get('/api/status')
@@ -117,12 +110,6 @@ export const tradingApi = {
   // 손익 조회
   getPnL: async (symbol: string = 'BTCUSDT') => {
     const response = await api.get(`/api/pnl/${symbol}`)
-    return response.data
-  },
-
-  // 테스트 신호 생성 (개발용)
-  createTestSignal: async (signalType: string = 'buy') => {
-    const response = await api.post(`/api/signals/test?signal_type=${signalType}`)
     return response.data
   },
 

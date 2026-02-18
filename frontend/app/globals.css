@@ -1,44 +1,43 @@
-/* Tailwind CSS directives */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
-  * {
-    @apply border-border;
-  }
-
   body {
-    @apply bg-dark-bg text-white;
+    @apply bg-background-dark text-slate-200 font-display;
   }
 }
 
-@layer components {
-  .card {
-    @apply bg-dark-card rounded-lg p-6 shadow-lg border border-gray-700;
+@layer utilities {
+  .text-glow {
+    text-shadow: 0 0 10px rgba(30, 148, 246, 0.5);
   }
+}
 
-  .btn-primary {
-    @apply bg-crypto-blue hover:bg-crypto-blue/80 text-white px-4 py-2 rounded-lg transition-colors;
-  }
+/* Custom scrollbar for terminal look */
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
 
-  .btn-success {
-    @apply bg-crypto-green hover:bg-crypto-green/80 text-white px-4 py-2 rounded-lg transition-colors;
-  }
+/* Thin scrollbar for webkit */
+::-webkit-scrollbar {
+  width: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #202e3b;
+  border-radius: 4px;
+}
 
-  .btn-danger {
-    @apply bg-crypto-red hover:bg-crypto-red/80 text-white px-4 py-2 rounded-lg transition-colors;
-  }
-
-  .price-up {
-    @apply text-crypto-green;
-  }
-
-  .price-down {
-    @apply text-crypto-red;
-  }
-
-  .loading-spinner {
-    @apply animate-spin rounded-full h-8 w-8 border-b-2 border-crypto-blue;
-  }
+.glass-panel {
+  background: rgba(24, 35, 46, 0.8);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
 }

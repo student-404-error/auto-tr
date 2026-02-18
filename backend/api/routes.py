@@ -1,17 +1,15 @@
 import os
 import asyncio
+import logging
+from datetime import datetime
 from fastapi import APIRouter, HTTPException, Request, Depends
 from pydantic import BaseModel
 from typing import Optional, Literal
-from models.portfolio_history import PortfolioHistory
-from models.trade_tracker import TradeTracker
 from models.trade_tracker_db import TradeTrackerDB
-from models.multi_asset_portfolio import MultiAssetPortfolio
-from models.enhanced_trade import EnhancedTradeTracker
-from models.position_manager import PositionManager
 from services.position_service import PositionService
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 # 단순 헤더 기반 API 키 보호
 def require_api_key(request: Request):
@@ -24,16 +22,9 @@ def require_api_key(request: Request):
     return True
 
 # 글로벌 인스턴스
-portfolio_history = PortfolioHistory()
-trade_tracker = TradeTracker()
 trade_tracker_db = TradeTrackerDB()
-enhanced_trade_tracker = EnhancedTradeTracker()
-position_manager = PositionManager()
-position_service = PositionService(position_manager, enhanced_trade_tracker)
-multi_asset_portfolio = MultiAssetPortfolio(
-    trade_tracker=enhanced_trade_tracker,
-    position_manager=position_manager
-)
+position_service = PositionService(trade_tracker_db)
+SUPPORTED_ASSETS = ["BTCUSDT", "XRPUSDT", "SOLUSDT"]
 
 # Pydantic models for request bodies
 class OpenPositionRequest(BaseModel):
@@ -46,6 +37,12 @@ class OpenPositionRequest(BaseModel):
 class ClosePositionRequest(BaseModel):
     position_id: str
     close_price: Optional[float] = None
+
+
+class ManualOrderRequest(BaseModel):
+    symbol: str = "BTCUSDT"
+    side: Literal["Buy", "Sell"] = "Buy"
+    qty: float = 0.001
 
 
 def get_trading_client(request: Request):
@@ -77,7 +74,7 @@ async def get_portfolio(request: Request):
                 "balances": {},
                 "current_btc_price": current_price,
                 "total_value_usd": 0,
-                "timestamp": asyncio.get_event_loop().time(),
+                "timestamp": datetime.utcnow().isoformat(),
                 "error": "API 키가 설정되지 않았습니다. 실제 잔고를 조회할 수 없습니다.",
                 "live_trading": True,
                 "authenticated": trading_client.authenticated
@@ -94,7 +91,7 @@ async def get_portfolio(request: Request):
             "balances": balance,
             "current_btc_price": current_price,
             "total_value_usd": total_usd,
-            "timestamp": asyncio.get_event_loop().time(),
+            "timestamp": datetime.utcnow().isoformat(),
             "live_trading": True,
             "authenticated": trading_client.authenticated,
             "max_trade_amount": trading_client.max_trade_amount
@@ -102,14 +99,14 @@ async def get_portfolio(request: Request):
         
         # 실제 잔고가 있는 경우에만 히스토리에 추가
         if balance:
-            portfolio_history.add_snapshot(portfolio_data)
+            await trade_tracker_db.add_portfolio_snapshot(portfolio_data)
         
         # 수익률 통계 추가 (잔고가 없어도 기본값 반환)
-        performance_stats = portfolio_history.get_performance_stats()
+        performance_stats = await trade_tracker_db.get_portfolio_performance()
         portfolio_data.update(performance_stats)
         
         # BTC 포지션 정보 추가
-        btc_pnl = trade_tracker.get_pnl("BTCUSDT", current_price)
+        btc_pnl = await trade_tracker_db.get_pnl("BTCUSDT", current_price)
         portfolio_data["btc_position"] = btc_pnl
         
         return portfolio_data
@@ -199,22 +196,37 @@ async def get_trading_status(request: Request):
 @router.post("/order")
 async def place_manual_order(
     request: Request,
-    symbol: str = "BTCUSDT",
-    side: str = "Buy",
-    qty: str = "0.001",
+    order: Optional[ManualOrderRequest] = None,
+    symbol: Optional[str] = None,
+    side: Optional[str] = None,
+    qty: Optional[float] = None,
     _auth=Depends(require_api_key),
 ):
     """수동 주문"""
     trading_client = get_trading_client(request)
 
     try:
-        result = await trading_client.place_order(symbol, side, "Market", qty)
+        payload_symbol = (order.symbol if order else symbol) or "BTCUSDT"
+        payload_side = (order.side if order else side) or "Buy"
+        payload_qty = float(order.qty if order else (qty if qty is not None else 0.001))
+
+        if payload_side not in ("Buy", "Sell"):
+            raise HTTPException(status_code=422, detail="side must be Buy or Sell")
+        if payload_qty <= 0:
+            raise HTTPException(status_code=422, detail="qty must be > 0")
+
+        result = await trading_client.place_order(
+            symbol=payload_symbol,
+            side=payload_side,
+            order_type="Market",
+            qty=f"{payload_qty}",
+        )
         if result.get("success"):
-            current_price = await trading_client.get_current_price(symbol)
-            trade_tracker.add_trade(
-                symbol,
-                side,
-                float(qty),
+            current_price = await trading_client.get_current_price(payload_symbol)
+            await trade_tracker_db.add_trade(
+                payload_symbol,
+                payload_side,
+                payload_qty,
                 current_price,
                 signal="manual",
             )
@@ -227,7 +239,7 @@ async def place_manual_order(
 async def get_portfolio_history(period: str = "7d"):
     """포트폴리오 히스토리 조회"""
     try:
-        history = portfolio_history.get_history(period)
+        history = await trade_tracker_db.get_portfolio_history(period)
         return {"history": history, "period": period}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -237,7 +249,7 @@ async def get_portfolio_history(period: str = "7d"):
 async def get_portfolio_performance():
     """포트폴리오 수익률 통계"""
     try:
-        stats = portfolio_history.get_performance_stats()
+        stats = await trade_tracker_db.get_portfolio_performance()
         return stats
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -247,7 +259,7 @@ async def get_portfolio_performance():
 async def get_positions():
     """현재 포지션 조회"""
     try:
-        positions = trade_tracker.get_current_positions()
+        positions = await trade_tracker_db.get_current_positions()
         return {"positions": positions}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -257,7 +269,7 @@ async def get_positions():
 async def get_recent_signals(limit: int = 5):
     """최근 거래 신호 조회 (기본 5개)"""
     try:
-        signals = trade_tracker.get_trade_signals(limit)
+        signals = await trade_tracker_db.get_trade_signals(limit)
         return {"signals": signals}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -270,22 +282,8 @@ async def get_pnl(request: Request, symbol: str = "BTCUSDT"):
     
     try:
         current_price = await trading_client.get_current_price(symbol)
-        pnl_data = trade_tracker.get_pnl(symbol, current_price)
+        pnl_data = await trade_tracker_db.get_pnl(symbol, current_price)
         return pnl_data
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.post("/signals/test")
-async def create_test_signal(signal_type: str = "buy"):
-    """테스트 신호 생성 (개발용)"""
-    try:
-        # buy, sell, hold 신호 지원
-        if signal_type not in ["buy", "sell", "hold"]:
-            raise HTTPException(status_code=400, detail="signal_type은 buy, sell, hold 중 하나여야 합니다")
-        
-        signal = trade_tracker.add_test_signal("BTCUSDT", signal_type)
-        return {"message": f"{signal_type} 테스트 신호 생성됨", "signal": signal}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -296,34 +294,79 @@ async def get_multi_asset_portfolio(request: Request):
     trading_client = get_trading_client(request)
     
     try:
-        # Get current prices for all supported assets
         current_prices = {}
-        for symbol in multi_asset_portfolio.SUPPORTED_ASSETS:
+        for symbol in SUPPORTED_ASSETS:
             try:
                 price = await trading_client.get_current_price(symbol)
                 current_prices[symbol] = price
             except Exception as e:
-                print(f"❌ {symbol} 가격 조회 실패: {e}")
+                logger.warning("가격 조회 실패 (%s): %s", symbol, e)
                 current_prices[symbol] = 0.0
-        
-        # Get comprehensive portfolio data
-        portfolio_data = multi_asset_portfolio.get_portfolio_data(current_prices)
-        
-        # Add portfolio snapshot for history tracking
-        if portfolio_data["total_portfolio_value"] > 0:
-            multi_asset_portfolio.add_portfolio_snapshot(current_prices)
-        
-        return portfolio_data
-        
+
+        current_positions = await trade_tracker_db.get_current_positions()
+        assets = {}
+        total_portfolio_value = 0.0
+        total_invested = 0.0
+        total_unrealized_pnl = 0.0
+
+        for symbol in SUPPORTED_ASSETS:
+            current_price = current_prices.get(symbol, 0.0)
+            symbol_positions = current_positions.get(symbol, {})
+            spot = symbol_positions.get("spot", {})
+            qty = float(spot.get("total_quantity", 0.0))
+            invested = float(spot.get("total_invested", 0.0))
+            current_value = qty * current_price
+            pnl = current_value - invested
+            pnl_pct = (pnl / invested * 100) if invested > 0 else 0.0
+
+            total_portfolio_value += current_value
+            total_invested += invested
+            total_unrealized_pnl += pnl
+
+            assets[symbol] = {
+                "symbol": symbol,
+                "total_quantity": qty,
+                "total_invested": invested,
+                "current_value": current_value,
+                "average_price": float(spot.get("average_price", 0.0)),
+                "current_price": current_price,
+                "unrealized_pnl": pnl,
+                "unrealized_pnl_percent": pnl_pct,
+                "percentage_of_portfolio": 0.0,
+            }
+
+        if total_portfolio_value > 0:
+            for symbol in assets:
+                assets[symbol]["percentage_of_portfolio"] = (
+                    assets[symbol]["current_value"] / total_portfolio_value * 100
+                )
+
+        return {
+            "timestamp": datetime.utcnow().isoformat(),
+            "supported_assets": SUPPORTED_ASSETS,
+            "assets": assets,
+            "total_portfolio_value": total_portfolio_value,
+            "total_invested": total_invested,
+            "total_unrealized_pnl": total_unrealized_pnl,
+            "total_unrealized_pnl_percent": (total_unrealized_pnl / total_invested * 100)
+            if total_invested > 0
+            else 0.0,
+            "asset_count": len([a for a in assets.values() if a["total_quantity"] > 0]),
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/portfolio/allocation")
-async def get_asset_allocation():
+async def get_asset_allocation(request: Request):
     """자산 배분 현황 조회 (파이 차트용)"""
     try:
-        allocation = multi_asset_portfolio.get_asset_allocation()
+        portfolio = await get_multi_asset_portfolio(request)
+        allocation = {
+            symbol: data.get("percentage_of_portfolio", 0.0)
+            for symbol, data in portfolio.get("assets", {}).items()
+            if data.get("current_value", 0.0) > 0
+        }
         return {"allocation": allocation}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -333,29 +376,7 @@ async def get_asset_allocation():
 async def get_trade_markers(symbol: str = "BTCUSDT"):
     """특정 심볼의 거래 마커 데이터 조회 (차트용)"""
     try:
-        # Get trades from enhanced trade tracker
-        symbol_trades = enhanced_trade_tracker.get_trades_by_symbol(symbol)
-        
-        # Convert trades to chart marker format
-        markers = []
-        for trade in symbol_trades:
-            if trade.status == 'filled':  # Only show filled trades
-                markers.append({
-                    "id": trade.id,
-                    "timestamp": trade.timestamp,
-                    "price": trade.price,
-                    "type": f"{trade.side}_{trade.position_type}",  # e.g., "buy_long", "sell_short"
-                    "side": trade.side,
-                    "position_type": trade.position_type,
-                    "quantity": trade.quantity,
-                    "dollar_amount": trade.dollar_amount,
-                    "signal": trade.signal,
-                    "fees": trade.fees
-                })
-        
-        # Sort by timestamp
-        markers.sort(key=lambda x: x["timestamp"])
-        
+        markers = await trade_tracker_db.get_trade_markers(symbol)
         return {"symbol": symbol, "markers": markers}
         
     except Exception as e:
@@ -365,7 +386,11 @@ async def get_trade_markers(symbol: str = "BTCUSDT"):
 # Position Management Endpoints
 
 @router.post("/positions/open")
-async def open_position(request: Request, position_request: OpenPositionRequest):
+async def open_position(
+    request: Request,
+    position_request: OpenPositionRequest,
+    _auth=Depends(require_api_key),
+):
     """새 포지션 열기"""
     try:
         trading_client = get_trading_client(request)
@@ -386,7 +411,11 @@ async def open_position(request: Request, position_request: OpenPositionRequest)
 
 
 @router.post("/positions/close")
-async def close_position(request: Request, close_request: ClosePositionRequest):
+async def close_position(
+    request: Request,
+    close_request: ClosePositionRequest,
+    _auth=Depends(require_api_key),
+):
     """포지션 닫기"""
     try:
         trading_client = get_trading_client(request)
@@ -407,7 +436,7 @@ async def close_position(request: Request, close_request: ClosePositionRequest):
 async def get_open_positions(symbol: Optional[str] = None):
     """열린 포지션 조회"""
     try:
-        positions = position_service.get_open_positions(symbol)
+        positions = await position_service.get_open_positions(symbol)
         return {"positions": positions, "count": len(positions)}
         
     except Exception as e:
@@ -418,7 +447,7 @@ async def get_open_positions(symbol: Optional[str] = None):
 async def get_closed_positions(symbol: Optional[str] = None, limit: int = 50):
     """닫힌 포지션 조회"""
     try:
-        positions = position_service.get_closed_positions(symbol, limit)
+        positions = await position_service.get_closed_positions(symbol, limit)
         return {"positions": positions, "count": len(positions)}
         
     except Exception as e:
@@ -429,7 +458,7 @@ async def get_closed_positions(symbol: Optional[str] = None, limit: int = 50):
 async def get_positions_summary(symbol: Optional[str] = None):
     """포지션 요약 및 통계"""
     try:
-        summary = position_service.get_position_summary(symbol)
+        summary = await position_service.get_position_summary(symbol)
         return summary
         
     except Exception as e:
@@ -440,7 +469,7 @@ async def get_positions_summary(symbol: Optional[str] = None):
 async def get_position_details(position_id: str):
     """특정 포지션 상세 정보"""
     try:
-        position = position_service.get_position_by_id(position_id)
+        position = await position_service.get_position_by_id(position_id)
         if not position:
             raise HTTPException(status_code=404, detail="Position not found")
         
@@ -453,13 +482,13 @@ async def get_position_details(position_id: str):
 
 
 @router.post("/positions/update-prices")
-async def update_position_prices(request: Request):
+async def update_position_prices(request: Request, _auth=Depends(require_api_key)):
     """포지션 가격 업데이트 (실시간 가격 반영)"""
     try:
         trading_client = get_trading_client(request)
         
         # Get current prices for all symbols with open positions
-        open_positions = position_service.get_open_positions()
+        open_positions = await position_service.get_open_positions()
         symbols = list(set([pos["symbol"] for pos in open_positions]))
         
         price_updates = {}
@@ -468,7 +497,7 @@ async def update_position_prices(request: Request):
                 current_price = await trading_client.get_current_price(symbol)
                 price_updates[symbol] = current_price
             except Exception as e:
-                print(f"❌ Failed to get price for {symbol}: {e}")
+                logger.warning("Failed to get price for %s: %s", symbol, e)
         
         # Update position prices
         await position_service.update_position_prices(price_updates)
@@ -486,6 +515,7 @@ async def update_position_prices(request: Request):
 @router.post("/positions/auto-close")
 async def auto_close_positions(
     request: Request,
+    _auth=Depends(require_api_key),
     symbol: Optional[str] = None,
     max_loss_percent: Optional[float] = None,
     min_profit_percent: Optional[float] = None,
@@ -496,14 +526,24 @@ async def auto_close_positions(
         trading_client = get_trading_client(request)
         
         # Update prices first
-        await update_position_prices(request)
+        open_positions = await position_service.get_open_positions(symbol)
+        symbols = list(set([pos["symbol"] for pos in open_positions]))
+        price_updates = {}
+        for item_symbol in symbols:
+            try:
+                current_price = await trading_client.get_current_price(item_symbol)
+                price_updates[item_symbol] = current_price
+            except Exception as e:
+                logger.warning("Failed to get price for %s: %s", item_symbol, e)
+        await position_service.update_position_prices(price_updates)
         
         # Auto-close positions based on criteria
         results = await position_service.auto_close_positions_by_criteria(
             symbol=symbol,
             max_loss_percent=max_loss_percent,
             min_profit_percent=min_profit_percent,
-            max_days_open=max_days_open
+            max_days_open=max_days_open,
+            trading_client=trading_client,
         )
         
         return {

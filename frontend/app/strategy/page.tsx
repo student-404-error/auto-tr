@@ -1,9 +1,9 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import Dashboard from '@/components/Dashboard'
+import StrategyPage from '@/components/StrategyPage'
 
-export default function Home() {
+export default function Strategy() {
   const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
@@ -18,5 +18,5 @@ export default function Home() {
     )
   }
 
-  return <Dashboard />
+  return <StrategyPage />
 }
