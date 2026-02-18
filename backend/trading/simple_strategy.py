@@ -13,6 +13,8 @@ class TradingStrategy:
         self.position = None  # None, 'long', 'short'
         self.last_signal = None
         self.trade_amount = None  # 동적으로 계산됨 (30달러 예산 기준)
+        self.last_reason = None
+        self.last_indicators = {}
         
         # 전략 파라미터
         self.rsi_period = 14
@@ -77,6 +79,10 @@ class TradingStrategy:
             
             current_price = recent_prices[-1]
             avg_price = sum(recent_prices) / len(recent_prices)
+            self.last_indicators = {
+                "close": current_price,
+                "avg_5": avg_price,
+            }
             
             print(f"📈 현재 가격: ${current_price:.2f}, 평균: ${avg_price:.2f}")
             
@@ -84,16 +90,19 @@ class TradingStrategy:
             # 매수 신호: 현재가가 평균보다 2% 이상 낮을 때
             if current_price < avg_price * 0.98 and self.position != 'long':
                 print(f"🟢 Buy signal!!")
+                self.last_reason = "below_avg_2pct"
                 return 'buy'
             
             # 매도 신호: 현재가가 평균보다 2% 이상 높을 때
             elif current_price > avg_price * 1.02 and self.position == 'long':
                 print(f"🔴 Sell signal!!")
+                self.last_reason = "above_avg_2pct"
                 return 'sell'
             
             # 보류 신호: 매매 조건에 맞지 않을 때
             else:
                 print(f"🟡 Hold signal - 현재 시장 상황에서는 거래하지 않음")
+                self.last_reason = "no_entry_or_exit"
                 return 'hold'
             
         except Exception as e:
@@ -194,10 +203,13 @@ class TradingStrategy:
     def get_strategy_status(self) -> Dict[str, Any]:
         """전략 상태 반환"""
         return {
+            "strategy": "simple",
             "is_active": self.is_active,
             "position": self.position,
             "last_signal": self.last_signal,
+            "last_reason": self.last_reason,
             "trade_amount": self.trade_amount,
+            "indicators": self.last_indicators,
             "parameters": {
                 "rsi_period": self.rsi_period,
                 "rsi_oversold": self.rsi_oversold,

@@ -31,12 +31,7 @@ cors_origins = [
 ]
 app.add_middleware(
     CORSMiddleware,
-<<<<<<< HEAD
-    allow_origins=["http://localhost:3000",
-                   "https://autotr.vercel.app"],
-=======
     allow_origins=cors_origins,
->>>>>>> 9e18e888ab3c3237285f00bb889dae7788a5cc89
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -98,7 +93,6 @@ async def get_status():
 
 
 # API 라우터 포함
-app.include_router(router)
 app.include_router(router, prefix="/api")
 if __name__ == "__main__":
     import uvicorn

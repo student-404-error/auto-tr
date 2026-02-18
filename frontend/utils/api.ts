@@ -13,6 +13,17 @@ const api = axios.create({
   },
 })
 
+// 요청 인터셉터: 매 요청마다 sessionStorage에서 API 키를 읽어 헤더에 주입
+api.interceptors.request.use((config) => {
+  if (typeof window !== 'undefined') {
+    const key = sessionStorage.getItem('dql_admin_key')
+    if (key) {
+      config.headers['X-API-KEY'] = key
+    }
+  }
+  return config
+})
+
 // 응답 인터셉터
 api.interceptors.response.use(
   (response) => response,
@@ -64,6 +75,12 @@ export const tradingApi = {
   // 트레이딩 상태 조회
   getTradingStatus: async () => {
     const response = await api.get('/api/trading/status')
+    return response.data
+  },
+
+  // 전략 파라미터 업데이트
+  updateTradingParams: async (params: Record<string, string | number | boolean>) => {
+    const response = await api.post('/api/trading/params', { params })
     return response.data
   },
 

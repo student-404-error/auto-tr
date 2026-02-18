@@ -7,15 +7,16 @@ from pydantic import BaseModel
 from typing import Optional, Literal
 from models.trade_tracker_db import TradeTrackerDB
 from services.position_service import PositionService
+from trading.strategy_params import RegimeTrendParams
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
 # 단순 헤더 기반 API 키 보호
 def require_api_key(request: Request):
-    api_key = os.getenv("ADMIN_API_KEY")
+    api_key = os.getenv("ADMIN_KEY") or os.getenv("ADMIN_API_KEY")
     if not api_key:
-        raise HTTPException(status_code=500, detail="ADMIN_API_KEY 환경변수가 설정되지 않았습니다")
+        raise HTTPException(status_code=500, detail="ADMIN_KEY or ADMIN_API_KEY is not configured")
     provided = request.headers.get("X-API-KEY")
     if provided != api_key:
         raise HTTPException(status_code=401, detail="Invalid API key")
@@ -43,6 +44,10 @@ class ManualOrderRequest(BaseModel):
     symbol: str = "BTCUSDT"
     side: Literal["Buy", "Sell"] = "Buy"
     qty: float = 0.001
+
+
+class StrategyParamsUpdateRequest(BaseModel):
+    params: dict
 
 
 def get_trading_client(request: Request):
@@ -169,11 +174,13 @@ async def get_chart_data(
 async def start_trading(request: Request, _auth=Depends(require_api_key)):
     """자동매매 시작"""
     trading_strategy = get_trading_strategy(request)
+    strategy_task = getattr(request.app.state, "strategy_task", None)
 
-    if trading_strategy.is_active:
+    if trading_strategy.is_active and strategy_task and not strategy_task.done():
         return {"message": "Trading is already active"}
 
-    asyncio.create_task(trading_strategy.start_trading())
+    task = asyncio.create_task(trading_strategy.start_trading())
+    request.app.state.strategy_task = task
     return {"message": "Auto-trading started"}
 
 
@@ -183,6 +190,10 @@ async def stop_trading(request: Request, _auth=Depends(require_api_key)):
     trading_strategy = get_trading_strategy(request)
 
     trading_strategy.stop_trading()
+    strategy_task = getattr(request.app.state, "strategy_task", None)
+    if strategy_task and not strategy_task.done():
+        strategy_task.cancel()
+    request.app.state.strategy_task = None
     return {"message": "Auto-trading stopped"}
 
 
@@ -191,6 +202,55 @@ async def get_trading_status(request: Request):
     """자동매매 상태 조회"""
     trading_strategy = get_trading_strategy(request)
     return trading_strategy.get_strategy_status()
+
+
+@router.post("/trading/params")
+async def update_trading_params(
+    request: Request,
+    payload: StrategyParamsUpdateRequest,
+    _auth=Depends(require_api_key),
+):
+    """전략 파라미터 업데이트"""
+    strategy = get_trading_strategy(request)
+    updates = payload.params or {}
+    if not updates:
+        raise HTTPException(status_code=422, detail="params is required")
+
+    status = strategy.get_strategy_status()
+    current_params = status.get("parameters", {})
+    if not isinstance(current_params, dict):
+        raise HTTPException(status_code=400, detail="Current strategy has no editable parameters")
+
+    unknown_keys = [k for k in updates.keys() if k not in current_params]
+    if unknown_keys:
+        raise HTTPException(status_code=422, detail=f"Unknown params: {', '.join(unknown_keys)}")
+
+    normalized = {}
+    for key, value in updates.items():
+        current_value = current_params.get(key)
+        target_type = type(current_value)
+        if target_type is bool:
+            normalized[key] = bool(value)
+        elif target_type is int:
+            normalized[key] = int(value)
+        elif target_type is float:
+            normalized[key] = float(value)
+        else:
+            normalized[key] = str(value)
+
+    if hasattr(strategy, "params") and isinstance(getattr(strategy, "params"), RegimeTrendParams):
+        params_obj = strategy.params
+        for key, value in normalized.items():
+            setattr(params_obj, key, value)
+        # Keep engine pointing to latest params object.
+        if hasattr(strategy, "signal_engine"):
+            strategy.signal_engine.params = params_obj
+    else:
+        for key, value in normalized.items():
+            if hasattr(strategy, key):
+                setattr(strategy, key, value)
+
+    return {"success": True, "parameters": strategy.get_strategy_status().get("parameters", {})}
 
 
 @router.post("/order")
@@ -266,11 +326,105 @@ async def get_positions():
 
 
 @router.get("/signals")
-async def get_recent_signals(limit: int = 5):
+async def get_recent_signals(request: Request, limit: int = 5):
     """최근 거래 신호 조회 (기본 5개)"""
     try:
-        signals = await trade_tracker_db.get_trade_signals(limit)
-        return {"signals": signals}
+        rows = await trade_tracker_db.get_trade_signals(limit)
+        normalized = []
+        for row in rows:
+            signal = str(row.get("signal") or "").lower()
+            side = str(row.get("side") or "").lower()
+            symbol = row.get("symbol", "BTCUSDT")
+            price = float(row.get("price") or 0.0)
+
+            if "buy" in signal or side == "buy":
+                msg = f"BUY signal executed on {symbol} @ {price:.4f}"
+                signal_type = "exec"
+            elif "sell" in signal or side == "sell":
+                msg = f"SELL signal executed on {symbol} @ {price:.4f}"
+                signal_type = "exec"
+            elif "hold" in signal:
+                msg = f"HOLD signal on {symbol}: waiting for confirmation"
+                signal_type = "signal"
+            else:
+                msg = f"Signal update on {symbol}: {row.get('signal', 'n/a')}"
+                signal_type = "info"
+
+            normalized.append(
+                {
+                    "timestamp": row.get("ts"),
+                    "type": signal_type,
+                    "message": msg,
+                    "signal": row.get("signal"),
+                    "side": row.get("side"),
+                }
+            )
+
+        trading_strategy = getattr(request.app.state, "trading_strategy", None)
+        if trading_strategy:
+            status = trading_strategy.get_strategy_status()
+            is_active = status.get("is_active", False)
+            last_signal = status.get("last_signal") or "hold"
+            last_reason = status.get("last_reason") or ""
+            indicators = status.get("indicators") or {}
+
+            # 항상 현재 전략 결정을 맨 위에 삽입
+            signal_label = str(last_signal).upper()
+            if is_active:
+                if signal_label in ("BUY", "SELL"):
+                    signal_type = "exec"
+                    msg = f"Strategy decision: {signal_label}"
+                    if last_reason:
+                        msg += f" ({last_reason})"
+                else:
+                    signal_type = "signal"
+                    msg = f"Strategy decision: HOLD"
+                    if last_reason:
+                        msg += f" — {last_reason}"
+            else:
+                signal_type = "warn"
+                msg = "Strategy is STOPPED"
+
+            normalized.insert(0, {
+                "timestamp": datetime.utcnow().isoformat(),
+                "type": signal_type,
+                "message": msg,
+            })
+
+            # 인디케이터 정보 (값이 있을 때만)
+            if indicators:
+                close_v = float(indicators.get("close") or 0.0)
+                ema_fast_v = float(indicators.get("ema_fast") or 0.0)
+                ema_slow_v = float(indicators.get("ema_slow") or 0.0)
+                gap_v = float(indicators.get("trend_gap_pct") or 0.0)
+                atr_v = float(indicators.get("atr") or 0.0)
+                normalized.insert(1, {
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "type": "info",
+                    "message": (
+                        f"close={close_v:.2f}  "
+                        f"EMA({ema_fast_v:.2f}/{ema_slow_v:.2f})  "
+                        f"gap={gap_v * 100:.3f}%  "
+                        f"ATR={atr_v:.2f}"
+                    ),
+                })
+            elif is_active:
+                # 전략은 실행 중이지만 아직 첫 루프 미완료
+                normalized.insert(1, {
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "type": "info",
+                    "message": "Fetching market data... (first cycle in progress)",
+                })
+
+        if not normalized:
+            normalized = [
+                {
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "type": "warn",
+                    "message": "No signals yet. Start the strategy to begin.",
+                }
+            ]
+        return {"signals": normalized[:limit]}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

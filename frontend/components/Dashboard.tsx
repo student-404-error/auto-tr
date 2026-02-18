@@ -38,6 +38,8 @@ export default function Dashboard() {
   const router = useRouter()
   const [portfolio, setPortfolio] = useState<Portfolio | null>(null)
   const [tradingStatus, setTradingStatus] = useState<TradingStatus | null>(null)
+  const [selectedSymbol, setSelectedSymbol] = useState('BTCUSDT')
+  const [selectedPnl, setSelectedPnl] = useState<any>(null)
   const [currentPrice, setCurrentPrice] = useState(0)
   const [serverOnline, setServerOnline] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
@@ -58,8 +60,9 @@ export default function Dashboard() {
       const [portfolioData, statusData, priceData] = await Promise.allSettled([
         tradingApi.getPortfolio(),
         tradingApi.getTradingStatus(),
-        tradingApi.getPrice('BTCUSDT'),
+        tradingApi.getPrice(selectedSymbol),
       ])
+      const pnlData = await tradingApi.getPnL(selectedSymbol).catch(() => null)
 
       if (portfolioData.status === 'fulfilled') {
         setPortfolio(portfolioData.value)
@@ -70,6 +73,7 @@ export default function Dashboard() {
       if (priceData.status === 'fulfilled') {
         setCurrentPrice(priceData.value.price || 0)
       }
+      setSelectedPnl(pnlData)
 
       const anySuccess = [portfolioData, statusData, priceData].some(r => r.status === 'fulfilled')
       setServerOnline(anySuccess)
@@ -78,7 +82,7 @@ export default function Dashboard() {
     } finally {
       setIsLoading(false)
     }
-  }, [])
+  }, [selectedSymbol])
 
   useEffect(() => {
     if (!authChecked) return
@@ -99,14 +103,13 @@ export default function Dashboard() {
   }
 
   const totalEquity = portfolio?.total_value_usd || 0
-  const btcPos = portfolio?.btc_position
-  const unrealizedPnl = btcPos?.unrealized_pnl || 0
-  const unrealizedPnlPercent = btcPos?.unrealized_pnl_percent || 0
-  const positionSide = btcPos?.side || null
-  const entryPrice = btcPos?.entry_price || 0
-  const liquidationPrice = btcPos?.liquidation_price || 0
-  const leverage = btcPos?.leverage || ''
-  const riskPercent = btcPos?.margin_ratio ? Math.round(btcPos.margin_ratio * 100) : 0
+  const unrealizedPnl = selectedPnl?.unrealized_pnl || 0
+  const unrealizedPnlPercent = selectedPnl?.unrealized_pnl_percent || 0
+  const positionSide = (selectedPnl?.quantity || 0) > 0 ? 'LONG' : null
+  const entryPrice = selectedPnl?.average_price || 0
+  const liquidationPrice = 0
+  const leverage = ''
+  const riskPercent = 0
 
   return (
     <>
@@ -114,7 +117,8 @@ export default function Dashboard() {
 
       <main className="flex-1 overflow-y-auto overflow-x-hidden h-screen pb-24 md:pb-6">
         <DashboardHeader
-          symbol="BTCUSDT"
+          symbol={selectedSymbol}
+          onSymbolChange={setSelectedSymbol}
           markPrice={currentPrice}
           totalEquity={totalEquity}
           serverOnline={serverOnline}

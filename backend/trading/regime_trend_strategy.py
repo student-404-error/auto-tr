@@ -94,6 +94,8 @@ class RegimeTrendStrategy:
         self.trade_amount: Optional[str] = None
         self.trailing_stop: Optional[float] = None
         self.bars_since_trade = self.params.cooldown_bars
+        self.last_reason: Optional[str] = None
+        self.last_indicators: Dict[str, float] = {}
 
         logger.info("RegimeTrendStrategy initialized with params=%s", self.params.to_dict())
 
@@ -131,6 +133,15 @@ class RegimeTrendStrategy:
             trailing_stop=self.trailing_stop,
             bars_since_trade=self.bars_since_trade,
         )
+        last_row = frame.iloc[-1]
+        self.last_reason = decision.reason
+        self.last_indicators = {
+            "close": float(last_row["close"]),
+            "ema_fast": float(last_row["ema_fast"]),
+            "ema_slow": float(last_row["ema_slow"]),
+            "trend_gap_pct": float(last_row["trend_gap_pct"]),
+            "atr": float(last_row["atr"]),
+        }
         self.last_signal = decision.signal
         self.trailing_stop = decision.trailing_stop
 
@@ -247,9 +258,11 @@ class RegimeTrendStrategy:
             "is_active": self.is_active,
             "position": self.position,
             "last_signal": self.last_signal,
+            "last_reason": self.last_reason,
             "trade_amount": self.trade_amount,
             "trailing_stop": self.trailing_stop,
             "bars_since_trade": self.bars_since_trade,
+            "indicators": self.last_indicators,
             "parameters": self.params.to_dict(),
             "parameter_descriptions": regime_trend_param_descriptions(),
         }

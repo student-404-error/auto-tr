@@ -136,6 +136,10 @@ export default function StrategyPage() {
   const [summary, setSummary] = useState<PositionSummary | null>(null)
   const [latestTrade, setLatestTrade] = useState<LatestTrade | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isSavingParams, setIsSavingParams] = useState(false)
+  const [paramsDraft, setParamsDraft] = useState<Record<string, any>>({})
+  const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [authChecked, setAuthChecked] = useState(false)
 
   // Auth guard: redirect to /auth if not authenticated
@@ -157,7 +161,10 @@ export default function StrategyPage() {
         tradingApi.getTradeHistory(),
       ])
 
-      if (statusRes.status === 'fulfilled') setStatus(statusRes.value)
+      if (statusRes.status === 'fulfilled') {
+        setStatus(statusRes.value)
+        setParamsDraft(statusRes.value.parameters || {})
+      }
       if (perfRes.status === 'fulfilled') setPerformance(perfRes.value)
       if (summaryRes.status === 'fulfilled') setSummary(summaryRes.value)
       if (tradesRes.status === 'fulfilled') {
@@ -208,8 +215,62 @@ export default function StrategyPage() {
   const totalTrades = summary?.statistics?.total_positions || 0
   const maxDD = 0
 
+  const handleStart = async () => {
+    setErrorMsg(null)
+    setIsSubmitting(true)
+    try {
+      await tradingApi.startTrading()
+      await fetchAll()
+      setStatus((prev) => (prev ? { ...prev, is_active: true } : prev))
+    } catch (e: any) {
+      setErrorMsg(e?.response?.data?.detail || 'Failed to start trading')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const handleStop = async () => {
+    setErrorMsg(null)
+    setIsSubmitting(true)
+    try {
+      await tradingApi.stopTrading()
+      await fetchAll()
+      setStatus((prev) => (prev ? { ...prev, is_active: false } : prev))
+    } catch (e: any) {
+      setErrorMsg(e?.response?.data?.detail || 'Failed to stop trading')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const handleParamChange = (key: string, rawValue: string) => {
+    const current = params[key]
+    let next: any = rawValue
+    if (typeof current === 'number') {
+      next = rawValue === '' ? '' : Number(rawValue)
+    }
+    setParamsDraft((prev) => ({ ...prev, [key]: next }))
+  }
+
+  const handleSaveParams = async () => {
+    setErrorMsg(null)
+    setIsSavingParams(true)
+    try {
+      const payload: Record<string, any> = {}
+      for (const [k, v] of Object.entries(paramsDraft)) {
+        payload[k] = v
+      }
+      await tradingApi.updateTradingParams(payload)
+      await fetchAll()
+    } catch (e: any) {
+      setErrorMsg(e?.response?.data?.detail || 'Failed to save parameters')
+    } finally {
+      setIsSavingParams(false)
+    }
+  }
+
   return (
-    <div className="w-full min-h-screen bg-background-dark text-slate-200 font-display flex flex-col antialiased">
+    <div className="w-full h-screen bg-background-dark text-slate-200 font-display flex flex-col antialiased overflow-hidden">
       {/* Header */}
       <header className="px-5 py-4 flex items-center justify-between sticky top-0 z-40 bg-background-dark/90 backdrop-blur-sm border-b border-white/5">
         <button
@@ -228,7 +289,7 @@ export default function StrategyPage() {
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 px-5 pb-32 overflow-y-auto space-y-6 max-w-2xl mx-auto w-full">
+      <main className="flex-1 min-h-0 px-5 pb-32 overflow-y-auto space-y-6 max-w-2xl mx-auto w-full">
         {/* Title & Status Badge */}
         <div className="flex items-start justify-between mt-4">
           <div>
@@ -295,16 +356,30 @@ export default function StrategyPage() {
           <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-success/50 to-transparent opacity-50"></div>
         </div>
 
-        {/* Active/Paused Toggle */}
-        <div className="bg-surface rounded-lg p-1.5 flex shadow-inner border border-white/5">
-          <div className={`flex-1 py-3 px-4 rounded-md font-semibold text-sm transition-all duration-300 flex items-center justify-center gap-2 ${isActive ? 'bg-primary shadow-glow text-white' : 'text-slate-500'}`}>
+        {errorMsg && (
+          <div className="bg-danger/10 border border-danger/30 text-danger text-sm rounded-lg px-4 py-3">
+            {errorMsg}
+          </div>
+        )}
+
+        {/* Controls */}
+        <div className="bg-surface rounded-lg p-1.5 grid grid-cols-2 gap-2 shadow-inner border border-white/5">
+          <button
+            onClick={handleStart}
+            disabled={isSubmitting || isActive}
+            className={`py-3 px-4 rounded-md font-semibold text-sm transition-all duration-300 flex items-center justify-center gap-2 ${isActive ? 'bg-primary/20 text-primary' : 'bg-primary shadow-glow text-white'} disabled:opacity-50`}
+          >
             <span className="material-icons-round text-base">play_circle</span>
-            Active
-          </div>
-          <div className={`flex-1 py-3 px-4 rounded-md font-medium text-sm transition-all duration-300 flex items-center justify-center gap-2 ${!isActive ? 'bg-danger/20 text-danger' : 'text-slate-500'}`}>
+            {isSubmitting ? 'Working...' : 'Start Trading'}
+          </button>
+          <button
+            onClick={handleStop}
+            disabled={isSubmitting || !isActive}
+            className={`py-3 px-4 rounded-md font-semibold text-sm transition-all duration-300 flex items-center justify-center gap-2 ${!isActive ? 'bg-danger/20 text-danger' : 'bg-danger text-white'} disabled:opacity-50`}
+          >
             <span className="material-icons-round text-base">pause_circle</span>
-            Paused
-          </div>
+            {isSubmitting ? 'Working...' : 'Stop Trading'}
+          </button>
         </div>
 
         {/* Rule Description */}
@@ -331,6 +406,7 @@ export default function StrategyPage() {
               const label = PARAM_LABELS[key] || key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
               const desc = paramDescs[key] || ''
               const highlight = isHighlightParam(key)
+              const draftValue = paramsDraft[key] ?? value
 
               return (
                 <div key={key} className="p-4 flex items-center justify-between group hover:bg-white/5 transition-colors">
@@ -343,12 +419,24 @@ export default function StrategyPage() {
                       {desc && <p className="text-xs text-slate-500 max-w-[200px] truncate">{desc}</p>}
                     </div>
                   </div>
-                  <div className={`font-mono px-3 py-1 rounded text-sm font-bold ${highlight ? 'text-primary bg-primary/10 border border-primary/20' : 'text-white bg-surface-highlight'}`}>
-                    {formatParamValue(key, value)}
-                  </div>
+                  <input
+                    className={`font-mono px-3 py-1 rounded text-sm font-bold w-36 text-right border ${highlight ? 'text-primary bg-primary/10 border-primary/30' : 'text-white bg-surface-highlight border-white/10'} focus:outline-none focus:border-primary`}
+                    value={String(draftValue)}
+                    onChange={(e) => handleParamChange(key, e.target.value)}
+                    disabled={isSavingParams}
+                  />
                 </div>
               )
             })}
+          </div>
+          <div className="flex justify-end">
+            <button
+              onClick={handleSaveParams}
+              disabled={isSavingParams}
+              className="mt-3 bg-primary hover:bg-primary/90 disabled:opacity-50 text-white text-sm font-semibold px-4 py-2 rounded-lg"
+            >
+              {isSavingParams ? 'Saving...' : 'Save Parameters'}
+            </button>
           </div>
         </div>
 

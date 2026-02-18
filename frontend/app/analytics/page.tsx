@@ -21,10 +21,22 @@ type AllocationEntry = {
   percentage: number
 }
 
+type RangeKey = '1D' | '1W' | '1M' | 'YTD' | 'ALL'
+
+const RANGE_PERIOD_MAP: Record<RangeKey, string> = {
+  '1D': '1d',
+  '1W': '7d',
+  '1M': '30d',
+  YTD: 'ytd',
+  ALL: 'all',
+}
+
 export default function AnalyticsPage() {
   const router = useRouter()
   const [authChecked, setAuthChecked] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
+  const [selectedRange, setSelectedRange] = useState<RangeKey>('1M')
   const [portfolioValue, setPortfolioValue] = useState(0)
   const [history, setHistory] = useState<PortfolioSnapshot[]>([])
   const [performance, setPerformance] = useState<any>(null)
@@ -42,13 +54,18 @@ export default function AnalyticsPage() {
 
   useEffect(() => {
     if (!authChecked) return
+    if (loading) {
+      // initial load: keep loading spinner
+    } else {
+      setRefreshing(true)
+    }
     ;(async () => {
       try {
         const [portfolioData, perfData, summaryData, historyData, allocationData, trades] = await Promise.all([
           tradingApi.getPortfolio(),
           tradingApi.getPortfolioPerformance(),
           tradingApi.getPositionsSummary(),
-          tradingApi.getPortfolioHistory('30d'),
+          tradingApi.getPortfolioHistory(RANGE_PERIOD_MAP[selectedRange]),
           tradingApi.getAssetAllocation(),
           tradingApi.getTradeHistory(),
         ])
@@ -64,21 +81,50 @@ export default function AnalyticsPage() {
         )
 
         const tradesList = trades.trades || []
-        const wins = tradesList.filter((trade: any) => trade.side === 'Buy').length
-        const losses = tradesList.filter((trade: any) => trade.side === 'Sell').length
-        const total = wins + losses || 1
-        const winRate = Math.min(99, Math.max(1, Math.round((wins / total) * 100)))
-        const riskReward = summaryData?.statistics?.win_rate ? Math.max(1.2, summaryData.statistics.win_rate / 40) : 2.1
-        const drawdown = Math.max(0.5, Math.abs(perfData?.monthly_change_percent ?? 4.2))
-        const sharpe = Math.max(0.1, (perfData?.monthly_change_percent ?? 2.8) / 1.2)
-        setTradeStats({ winRate, riskReward, drawdown, sharpe })
+        const winRate = Number(summaryData?.statistics?.win_rate || 0)
+
+        const closed = summaryData?.recent_closed_positions || []
+        const realized = closed.map((p: any) => Number(p.realized_pnl || 0))
+        const winners = realized.filter((x: number) => x > 0)
+        const losers = realized.filter((x: number) => x < 0)
+        const avgWin = winners.length ? winners.reduce((a: number, b: number) => a + b, 0) / winners.length : 0
+        const avgLossAbs = losers.length
+          ? Math.abs(losers.reduce((a: number, b: number) => a + b, 0) / losers.length)
+          : 0
+        const riskReward = avgLossAbs > 0 ? avgWin / avgLossAbs : 0
+
+        const historyRows = historyData.history || historyData || []
+        const values = historyRows.map((h: any) => Number(h.total_value_usd || 0)).filter((v: number) => v > 0)
+        let maxDrawdown = 0
+        let peak = values[0] || 0
+        for (const v of values) {
+          if (v > peak) peak = v
+          if (peak > 0) {
+            const dd = ((peak - v) / peak) * 100
+            if (dd > maxDrawdown) maxDrawdown = dd
+          }
+        }
+
+        const returns: number[] = []
+        for (let i = 1; i < values.length; i++) {
+          if (values[i - 1] > 0) returns.push((values[i] - values[i - 1]) / values[i - 1])
+        }
+        const mean = returns.length ? returns.reduce((a, b) => a + b, 0) / returns.length : 0
+        const variance = returns.length
+          ? returns.reduce((a, b) => a + (b - mean) ** 2, 0) / returns.length
+          : 0
+        const std = Math.sqrt(variance)
+        const sharpe = std > 0 ? (mean / std) * Math.sqrt(returns.length) : 0
+
+        setTradeStats({ winRate, riskReward, drawdown: maxDrawdown, sharpe })
       } catch (error) {
         console.error('analytics load error', error)
       } finally {
         setLoading(false)
+        setRefreshing(false)
       }
     })()
-  }, [authChecked])
+  }, [authChecked, selectedRange])
 
   const monthlyReturns = useMemo<MonthlyReturn[]>(() => {
     if (!history.length) {
@@ -118,16 +164,30 @@ export default function AnalyticsPage() {
       return ''
     }
     const sorted = [...history].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
-    const values = sorted.map((item) => item.total_portfolio_value)
+    const values = sorted
+      .map((item) => Number(item.total_portfolio_value))
+      .filter((v) => Number.isFinite(v))
+    if (values.length < 2) return ''
     const max = Math.max(...values)
     const min = Math.min(...values)
     return values
       .map((value, index) => {
         const x = (index / Math.max(1, values.length - 1)) * 1000
         const y = max === min ? 50 : 100 - ((value - min) / (max - min)) * 80
+        if (!Number.isFinite(x) || !Number.isFinite(y)) return null
         return `${x.toFixed(2)},${y.toFixed(2)}`
       })
+      .filter(Boolean)
       .join(' ')
+  }, [history])
+
+  const rangeReturnPercent = useMemo(() => {
+    if (history.length < 2) return 0
+    const sorted = [...history].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
+    const start = Number(sorted[0].total_portfolio_value || 0)
+    const end = Number(sorted[sorted.length - 1].total_portfolio_value || 0)
+    if (start <= 0) return 0
+    return ((end - start) / start) * 100
   }, [history])
 
   if (!authChecked || loading) {
@@ -148,7 +208,7 @@ export default function AnalyticsPage() {
                 </h2>
                 <span className="text-success text-sm font-bold flex items-center gap-0.5">
                   <span className="material-icons-round text-sm">trending_up</span>
-                  +{(performance?.monthly_change_percent ?? 12.4).toFixed(1)}%
+                  {rangeReturnPercent >= 0 ? '+' : ''}{rangeReturnPercent.toFixed(1)}%
                 </span>
               </div>
             </div>
@@ -158,11 +218,13 @@ export default function AnalyticsPage() {
             </div>
           </div>
           <div className="flex items-center gap-6">
+            {refreshing && <span className="text-xs text-gray-400">Updating...</span>}
             <div className="flex p-1 bg-surface-dark rounded-lg border border-white/5">
-              {['1D', '1W', '1M', 'YTD', 'ALL'].map((label) => (
+              {(['1D', '1W', '1M', 'YTD', 'ALL'] as RangeKey[]).map((label) => (
                 <button
                   key={label}
-                  className={`px-4 py-1.5 text-xs font-medium rounded ${label === '1M' ? 'bg-primary text-white shadow-sm' : 'text-gray-400 hover:text-white transition-colors'}`}
+                  onClick={() => setSelectedRange(label)}
+                  className={`px-4 py-1.5 text-xs font-medium rounded ${label === selectedRange ? 'bg-primary text-white shadow-sm' : 'text-gray-400 hover:text-white transition-colors'}`}
                 >
                   {label}
                 </button>
@@ -177,7 +239,7 @@ export default function AnalyticsPage() {
         <main className="flex-1 overflow-y-auto p-8 space-y-8">
           <section className="bg-surface-dark rounded-xl border border-white/5 p-6 relative overflow-hidden group">
             <div className="flex justify-between items-center mb-6">
-              <h3 className="font-bold text-gray-400 text-sm uppercase tracking-wider">Equity Curve (30-Day View)</h3>
+              <h3 className="font-bold text-gray-400 text-sm uppercase tracking-wider">Equity Curve ({selectedRange} View)</h3>
               <div className="flex items-center gap-4 text-xs">
                 <div className="flex items-center gap-2">
                   <span className="w-3 h-3 rounded-full bg-primary"></span>
@@ -202,13 +264,25 @@ export default function AnalyticsPage() {
                     <stop offset="100%" stopColor="#1e94f6" stopOpacity={0}></stop>
                   </linearGradient>
                 </defs>
-                <path d="M0,90 C100,85 200,88 300,70 C400,52 500,60 600,40 C700,20 800,30 900,16 L1000,10 L1000,100 L0,100 Z" fill="url(#curveFill)"></path>
-                <path d="M0,90 C100,85 200,88 300,70 C400,52 500,60 600,40 C700,20 800,30 900,16 L1000,10" fill="none" stroke="#1e94f6" strokeLinecap="round" strokeWidth="2"></path>
+                {equityCurvePoints ? (
+                  <>
+                    <polygon points={`${equityCurvePoints} 1000,100 0,100`} fill="url(#curveFill)"></polygon>
+                    <polyline points={equityCurvePoints} fill="none" stroke="#1e94f6" strokeLinecap="round" strokeWidth="2"></polyline>
+                  </>
+                ) : null}
               </svg>
               <div className="absolute bottom-0 left-0 right-0 flex justify-between pt-4 text-[11px] text-gray-500 font-medium">
-                {['FEB 01', 'FEB 07', 'FEB 14', 'FEB 21', 'FEB 28', 'MAR 01'].map((label) => (
-                  <span key={label}>{label}</span>
-                ))}
+                {history.length > 0
+                  ? [history[0], history[Math.floor(history.length / 2)], history[history.length - 1]]
+                      .filter(Boolean)
+                      .map((entry, idx) => (
+                        <span key={`${entry.timestamp}_${idx}`}>
+                          {new Date(entry.timestamp).toLocaleDateString('en-US', { month: 'short', day: '2-digit' })}
+                        </span>
+                      ))
+                  : ['-', '-', '-'].map((label, idx) => (
+                      <span key={`${label}_${idx}`}>{label}</span>
+                    ))}
               </div>
             </div>
           </section>

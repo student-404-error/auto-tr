@@ -36,23 +36,12 @@ export function restoreAuthHeader(): void {
  */
 export async function validateAdminKey(key: string): Promise<boolean> {
   try {
-    // Temporarily set the header for this request
-    const response = await api.get('/api/trading/status', {
+    // Validate against a protected endpoint.
+    const response = await api.post('/api/positions/update-prices', null, {
       headers: { 'X-API-KEY': key },
     })
-    return response.status === 200
+    return response.status >= 200 && response.status < 300
   } catch {
-    // trading/status is public, so try a protected endpoint instead
-    try {
-      await api.post('/api/positions/update-prices', null, {
-        headers: { 'X-API-KEY': key },
-      })
-      return true
-    } catch (err: any) {
-      // 401 means wrong key, anything else means key might be fine but endpoint errored
-      if (err?.response?.status === 401) return false
-      // If we get 500 or other, the key was accepted (auth passed) but something else failed
-      return err?.response?.status !== 401
-    }
+    return false
   }
 }

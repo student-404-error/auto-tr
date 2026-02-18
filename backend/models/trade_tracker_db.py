@@ -494,6 +494,8 @@ class TradeTrackerDB:
 
     async def get_portfolio_history(self, period: str = "7d") -> List[Dict[str, Any]]:
         await self._init()
+        where_sql = "WHERE datetime(ts) >= datetime('now', ?)"
+        params: List[Any] = []
         period_map = {
             "1h": "-1 hour",
             "24h": "-24 hour",
@@ -501,18 +503,26 @@ class TradeTrackerDB:
             "7d": "-7 day",
             "30d": "-30 day",
         }
-        delta = period_map.get(period, "-7 day")
-
+        if period in period_map:
+            params.append(period_map[period])
+        elif period == "ytd":
+            where_sql = "WHERE datetime(ts) >= datetime('now', 'start of year')"
+        elif period == "all":
+            where_sql = ""
+        else:
+            params.append("-7 day")
         async with aiosqlite.connect(self.db_path) as db:
             db.row_factory = aiosqlite.Row
             cursor = await db.execute(
                 """
                 SELECT ts, total_value_usd, current_btc_price, balances_json
                 FROM portfolio_snapshots
-                WHERE datetime(ts) >= datetime('now', ?)
+                """
+                + where_sql
+                + """
                 ORDER BY datetime(ts) ASC
                 """,
-                (delta,),
+                tuple(params),
             )
             rows = await cursor.fetchall()
 
