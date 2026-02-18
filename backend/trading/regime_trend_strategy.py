@@ -59,7 +59,11 @@ class RegimeTrendSignalEngine:
 
         if in_position:
             candidate_stop = close_price - (atr * self.params.trailing_stop_atr_mult)
-            next_stop = max(trailing_stop or candidate_stop, candidate_stop)
+            # trailing stop은 항상 위로만 올라감 (역방향 이동 방지)
+            if trailing_stop is not None and trailing_stop > 0:
+                next_stop = max(trailing_stop, candidate_stop)
+            else:
+                next_stop = candidate_stop
 
             if close_price <= next_stop:
                 return SignalDecision("sell", "trailing_stop_hit", next_stop, close_price)

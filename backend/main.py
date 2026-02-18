@@ -1,9 +1,13 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 import os
 from datetime import datetime
 from dotenv import load_dotenv
 import logging
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
@@ -14,7 +18,6 @@ load_dotenv()
 
 from api.routes import router, trade_tracker_db
 from trading.bybit_client import BybitClient
-from trading.simple_strategy import TradingStrategy as SimpleTradingStrategy
 from trading.regime_trend_strategy import RegimeTrendStrategy
 from trading.breakout_volume_strategy import BreakoutVolumeStrategy
 from trading.mean_reversion_strategy import MeanReversionStrategy
@@ -27,6 +30,19 @@ from trading.strategy_params import (
 )
 
 app = FastAPI(title="Bitcoin Auto-Trading API", version="1.0.0")
+
+# Rate Limiting
+limiter = Limiter(key_func=get_remote_address, default_limits=["60/minute"])
+app.state.limiter = limiter
+
+
+@app.exception_handler(RateLimitExceeded)
+async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
+    return JSONResponse(
+        status_code=429,
+        content={"detail": "Rate limit exceeded. Try again later."},
+    )
+
 
 # CORS 설정
 cors_origins = [
@@ -50,9 +66,6 @@ def build_strategy(strategy_name: str, client: BybitClient):
     """전략 이름으로 전략 인스턴스 생성"""
     symbol = os.getenv("STRATEGY_SYMBOL", "BTCUSDT")
     loop_seconds = int(os.getenv("STRATEGY_LOOP_SECONDS", "60"))
-
-    if strategy_name == "simple":
-        return SimpleTradingStrategy(client, trade_tracker_db)
 
     if strategy_name == "breakout_volume":
         return BreakoutVolumeStrategy(
@@ -100,6 +113,11 @@ async def startup_event():
     app.state.strategy_task = None
     # 전략 전환 함수를 app.state에 노출
     app.state.build_strategy = build_strategy
+
+    # DB 보관 정책: portfolio_snapshots만 정리 (signal_log는 퀀트 분석용으로 영구 보관)
+    deleted_snapshots = await trade_tracker_db.cleanup_old_snapshots(30)
+    if deleted_snapshots > 0:
+        logger.info("🗑️ DB cleanup: %d old snapshots removed", deleted_snapshots)
 
     logger.info("🚀 Bitcoin Auto-Trading System 시작됨")
     logger.info("📡 REST API 준비됨")

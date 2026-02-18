@@ -35,12 +35,21 @@ interface Portfolio {
   }
 }
 
+interface PnLData {
+  unrealized_pnl: number
+  unrealized_pnl_percent: number
+  quantity: number
+  average_price: number
+  current_price: number
+  symbol: string
+}
+
 export default function Dashboard() {
   const router = useRouter()
   const [portfolio, setPortfolio] = useState<Portfolio | null>(null)
   const [tradingStatus, setTradingStatus] = useState<TradingStatus | null>(null)
   const [selectedSymbol, setSelectedSymbol] = useState('BTCUSDT')
-  const [selectedPnl, setSelectedPnl] = useState<any>(null)
+  const [selectedPnl, setSelectedPnl] = useState<PnLData | null>(null)
   const [currentPrice, setCurrentPrice] = useState(0)
   const [serverOnline, setServerOnline] = useState(false)
   const [isLoading, setIsLoading] = useState(true)

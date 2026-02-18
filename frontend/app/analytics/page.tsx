@@ -21,6 +21,17 @@ type AllocationEntry = {
   percentage: number
 }
 
+interface PerformanceStats {
+  daily_change_percent?: number
+  weekly_change_percent?: number
+  monthly_change_percent?: number
+}
+
+interface ClosedPosition {
+  realized_pnl?: number
+  [key: string]: unknown
+}
+
 type RangeKey = '1D' | '1W' | '1M' | 'YTD' | 'ALL'
 
 const RANGE_PERIOD_MAP: Record<RangeKey, string> = {
@@ -39,7 +50,7 @@ export default function AnalyticsPage() {
   const [selectedRange, setSelectedRange] = useState<RangeKey>('1M')
   const [portfolioValue, setPortfolioValue] = useState(0)
   const [history, setHistory] = useState<PortfolioSnapshot[]>([])
-  const [performance, setPerformance] = useState<any>(null)
+  const [performance, setPerformance] = useState<PerformanceStats | null>(null)
   const [allocation, setAllocation] = useState<AllocationEntry[]>([])
   const [tradeStats, setTradeStats] = useState({ winRate: 64, riskReward: 2.1, drawdown: 4.2, sharpe: 2.8 })
 
@@ -84,7 +95,7 @@ export default function AnalyticsPage() {
         const winRate = Number(summaryData?.statistics?.win_rate || 0)
 
         const closed = summaryData?.recent_closed_positions || []
-        const realized = closed.map((p: any) => Number(p.realized_pnl || 0))
+        const realized = closed.map((p: ClosedPosition) => Number(p.realized_pnl || 0))
         const winners = realized.filter((x: number) => x > 0)
         const losers = realized.filter((x: number) => x < 0)
         const avgWin = winners.length ? winners.reduce((a: number, b: number) => a + b, 0) / winners.length : 0
@@ -94,7 +105,7 @@ export default function AnalyticsPage() {
         const riskReward = avgLossAbs > 0 ? avgWin / avgLossAbs : 0
 
         const historyRows = historyData.history || historyData || []
-        const values = historyRows.map((h: any) => Number(h.total_value_usd || 0)).filter((v: number) => v > 0)
+        const values = historyRows.map((h: PortfolioSnapshot) => Number(h.total_portfolio_value || 0)).filter((v: number) => v > 0)
         let maxDrawdown = 0
         let peak = values[0] || 0
         for (const v of values) {

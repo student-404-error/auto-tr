@@ -36,8 +36,7 @@ export function restoreAuthHeader(): void {
  */
 export async function validateAdminKey(key: string): Promise<boolean> {
   try {
-    // Validate against a protected endpoint.
-    const response = await api.post('/api/positions/update-prices', null, {
+    const response = await api.get('/api/auth/validate', {
       headers: { 'X-API-KEY': key },
     })
     return response.status >= 200 && response.status < 300

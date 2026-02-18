@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS signal_log (
 
 CREATE INDEX IF NOT EXISTS idx_signal_log_ts ON signal_log(ts DESC);
 CREATE INDEX IF NOT EXISTS idx_signal_log_strategy ON signal_log(strategy, ts DESC);
+CREATE INDEX IF NOT EXISTS idx_signal_log_strategy_signal ON signal_log(strategy, signal);
 
 CREATE TABLE IF NOT EXISTS trades (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -42,6 +43,8 @@ CREATE TABLE IF NOT EXISTS trades (
 
 CREATE INDEX IF NOT EXISTS idx_trades_ts ON trades(ts DESC);
 CREATE INDEX IF NOT EXISTS idx_trades_symbol_ts ON trades(symbol, ts DESC);
+CREATE INDEX IF NOT EXISTS idx_trades_side_signal ON trades(side, signal);
+CREATE INDEX IF NOT EXISTS idx_trades_symbol_side ON trades(symbol, side);
 
 CREATE TABLE IF NOT EXISTS positions (
     id TEXT PRIMARY KEY,
@@ -184,6 +187,7 @@ class TradeTrackerDB:
                 FROM signal_log {where}
                 GROUP BY strategy, signal
                 ORDER BY strategy, cnt DESC
+                LIMIT 100
                 """,
                 params,
             )
@@ -198,6 +202,28 @@ class TradeTrackerDB:
             key = f"{row['strategy']}:{row['signal']}"
             stats["by_signal"][key] = int(row["cnt"])
         return stats
+
+    async def cleanup_old_signal_logs(self, retention_days: int = 7) -> int:
+        """오래된 signal_log 레코드 삭제 (보관 정책)"""
+        await self._init()
+        async with aiosqlite.connect(self.db_path) as db:
+            cursor = await db.execute(
+                "DELETE FROM signal_log WHERE ts < datetime('now', ?)",
+                (f"-{retention_days} days",),
+            )
+            await db.commit()
+            return cursor.rowcount
+
+    async def cleanup_old_snapshots(self, retention_days: int = 30) -> int:
+        """오래된 portfolio_snapshots 레코드 삭제"""
+        await self._init()
+        async with aiosqlite.connect(self.db_path) as db:
+            cursor = await db.execute(
+                "DELETE FROM portfolio_snapshots WHERE ts < datetime('now', ?)",
+                (f"-{retention_days} days",),
+            )
+            await db.commit()
+            return cursor.rowcount
 
     async def add_trade(
         self,

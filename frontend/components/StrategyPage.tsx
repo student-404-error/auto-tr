@@ -2,8 +2,16 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
+import axios from 'axios'
 import { tradingApi } from '@/utils/api'
 import { isAuthenticated, restoreAuthHeader } from '@/utils/auth'
+
+function getErrorMessage(e: unknown): string {
+  if (axios.isAxiosError(e)) {
+    return e.response?.data?.detail || e.message
+  }
+  return e instanceof Error ? e.message : 'Unknown error'
+}
 
 interface StrategyStatus {
   strategy?: string
@@ -189,7 +197,7 @@ export default function StrategyPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isSavingParams, setIsSavingParams] = useState(false)
   const [isChangingStrategy, setIsChangingStrategy] = useState(false)
-  const [paramsDraft, setParamsDraft] = useState<Record<string, any>>({})
+  const [paramsDraft, setParamsDraft] = useState<Record<string, string | number | boolean>>({})
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [successMsg, setSuccessMsg] = useState<string | null>(null)
   const [authChecked, setAuthChecked] = useState(false)
@@ -292,8 +300,8 @@ export default function StrategyPage() {
       await tradingApi.startTrading()
       await fetchAll()
       setStatus((prev) => (prev ? { ...prev, is_active: true } : prev))
-    } catch (e: any) {
-      setErrorMsg(e?.response?.data?.detail || 'Failed to start trading')
+    } catch (e: unknown) {
+      setErrorMsg(getErrorMessage(e) || 'Failed to start trading')
     } finally {
       setIsSubmitting(false)
     }
@@ -306,8 +314,8 @@ export default function StrategyPage() {
       await tradingApi.stopTrading()
       await fetchAll()
       setStatus((prev) => (prev ? { ...prev, is_active: false } : prev))
-    } catch (e: any) {
-      setErrorMsg(e?.response?.data?.detail || 'Failed to stop trading')
+    } catch (e: unknown) {
+      setErrorMsg(getErrorMessage(e) || 'Failed to stop trading')
     } finally {
       setIsSubmitting(false)
     }
@@ -324,8 +332,8 @@ export default function StrategyPage() {
       setShowStrategySelector(false)
       setSuccessMsg(`Strategy changed to ${STRATEGY_META[strategyKey]?.name || strategyKey}`)
       setTimeout(() => setSuccessMsg(null), 3000)
-    } catch (e: any) {
-      setErrorMsg(e?.response?.data?.detail || 'Failed to change strategy')
+    } catch (e: unknown) {
+      setErrorMsg(getErrorMessage(e) || 'Failed to change strategy')
     } finally {
       setIsChangingStrategy(false)
     }
@@ -333,7 +341,7 @@ export default function StrategyPage() {
 
   const handleParamChange = (key: string, rawValue: string) => {
     const current = params[key]
-    let next: any = rawValue
+    let next: string | number = rawValue
     if (typeof current === 'number') {
       next = rawValue === '' ? '' : Number(rawValue)
     }
@@ -344,14 +352,10 @@ export default function StrategyPage() {
     setErrorMsg(null)
     setIsSavingParams(true)
     try {
-      const payload: Record<string, any> = {}
-      for (const [k, v] of Object.entries(paramsDraft)) {
-        payload[k] = v
-      }
-      await tradingApi.updateTradingParams(payload)
+      await tradingApi.updateTradingParams(paramsDraft)
       await fetchAll()
-    } catch (e: any) {
-      setErrorMsg(e?.response?.data?.detail || 'Failed to save parameters')
+    } catch (e: unknown) {
+      setErrorMsg(getErrorMessage(e) || 'Failed to save parameters')
     } finally {
       setIsSavingParams(false)
     }

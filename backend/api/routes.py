@@ -3,14 +3,17 @@ import asyncio
 import logging
 from datetime import datetime
 from fastapi import APIRouter, HTTPException, Request, Depends
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional, Literal, List
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 from models.trade_tracker_db import TradeTrackerDB
 from services.position_service import PositionService
 from trading.strategy_params import RegimeTrendParams
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+limiter = Limiter(key_func=get_remote_address)
 
 # 단순 헤더 기반 API 키 보호
 def require_api_key(request: Request):
@@ -31,9 +34,9 @@ SUPPORTED_ASSETS = ["BTCUSDT", "XRPUSDT", "SOLUSDT"]
 class OpenPositionRequest(BaseModel):
     symbol: str
     position_type: Literal['long', 'short']
-    entry_price: float
-    quantity: float
-    dollar_amount: float
+    entry_price: float = Field(gt=0, description="Entry price must be positive")
+    quantity: float = Field(gt=0, description="Quantity must be positive")
+    dollar_amount: float = Field(gt=0, description="Dollar amount must be positive")
 
 class ClosePositionRequest(BaseModel):
     position_id: str
@@ -43,7 +46,7 @@ class ClosePositionRequest(BaseModel):
 class ManualOrderRequest(BaseModel):
     symbol: str = "BTCUSDT"
     side: Literal["Buy", "Sell"] = "Buy"
-    qty: float = 0.001
+    qty: float = Field(default=0.001, gt=0, description="Order quantity must be positive")
 
 
 class StrategyParamsUpdateRequest(BaseModel):
@@ -54,6 +57,13 @@ AVAILABLE_STRATEGIES = ["regime_trend", "breakout_volume", "mean_reversion", "du
 
 class StrategyChangeRequest(BaseModel):
     strategy: str
+
+
+@router.get("/auth/validate")
+@limiter.limit("10/minute")
+async def validate_auth(request: Request, _auth=Depends(require_api_key)):
+    """API 키 유효성 검증 전용 엔드포인트 (부작용 없음)"""
+    return {"valid": True}
 
 
 def get_trading_client(request: Request):
@@ -177,6 +187,7 @@ async def get_chart_data(
 
 
 @router.post("/trading/start")
+@limiter.limit("5/minute")
 async def start_trading(request: Request, _auth=Depends(require_api_key)):
     """자동매매 시작"""
     trading_strategy = get_trading_strategy(request)
@@ -191,6 +202,7 @@ async def start_trading(request: Request, _auth=Depends(require_api_key)):
 
 
 @router.post("/trading/stop")
+@limiter.limit("5/minute")
 async def stop_trading(request: Request, _auth=Depends(require_api_key)):
     """자동매매 중지"""
     trading_strategy = get_trading_strategy(request)
@@ -260,6 +272,7 @@ async def update_trading_params(
 
 
 @router.post("/order")
+@limiter.limit("10/minute")
 async def place_manual_order(
     request: Request,
     order: Optional[ManualOrderRequest] = None,
@@ -793,6 +806,7 @@ async def list_strategies(request: Request):
 
 
 @router.post("/trading/strategy")
+@limiter.limit("5/minute")
 async def change_strategy(
     request: Request,
     body: StrategyChangeRequest,
