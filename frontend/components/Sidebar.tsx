@@ -63,10 +63,6 @@ export default function Sidebar({ serverOnline }: SidebarProps) {
               <span className="material-icons">analytics</span>
               <span className="hidden lg:block font-medium">Analytics</span>
             </Link>
-            <a className="flex items-center gap-3 px-3 py-3 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors" href="#">
-              <span className="material-icons">terminal</span>
-              <span className="hidden lg:block font-medium">Logs</span>
-            </a>
           </nav>
         </div>
         <div className="flex flex-col gap-4">
