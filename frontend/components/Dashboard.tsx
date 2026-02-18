@@ -14,6 +14,7 @@ import MarketSentiment from './MarketSentiment'
 
 interface TradingStatus {
   is_active: boolean
+  strategy?: string
   strategy_name?: string
   position?: string | null
   last_signal?: string | null

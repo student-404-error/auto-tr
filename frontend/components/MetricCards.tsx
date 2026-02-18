@@ -4,9 +4,17 @@ import Link from 'next/link'
 
 interface TradingStatus {
   is_active: boolean
+  strategy?: string
   strategy_name?: string
   position?: string | null
   last_signal?: string | null
+}
+
+const STRATEGY_DISPLAY_NAMES: Record<string, string> = {
+  regime_trend: 'Regime Trend',
+  breakout_volume: 'Breakout + Volume',
+  mean_reversion: 'Mean Reversion',
+  dual_timeframe: 'Dual Timeframe',
 }
 
 interface MetricCardsProps {
@@ -36,7 +44,8 @@ export default function MetricCards({
   liquidationPrice,
 }: MetricCardsProps) {
   const isActive = tradingStatus?.is_active || false
-  const strategyName = tradingStatus?.strategy_name || 'Regime-Trend'
+  const strategyKey = tradingStatus?.strategy || tradingStatus?.strategy_name || ''
+  const strategyName = STRATEGY_DISPLAY_NAMES[strategyKey] || strategyKey || 'No Strategy'
   const pnlPositive = unrealizedPnl >= 0
 
   return (
