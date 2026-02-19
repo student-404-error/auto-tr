@@ -453,13 +453,16 @@ async def get_recent_signals(request: Request, limit: int = 5):
 
                 elif strategy_key == "dual_timeframe":
                     rsi_v = float(indicators.get("rsi") or 0.0)
+                    rsi_prev_v = float(indicators.get("rsi_prev") or 0.0)
                     ema_v = float(indicators.get("ema") or 0.0)
                     htf_bullish = bool(indicators.get("htf_bullish", 0))
+                    htf_ema_f = float(indicators.get("htf_ema_fast") or 0.0)
+                    htf_ema_s = float(indicators.get("htf_ema_slow") or 0.0)
                     ind_msg = (
                         f"close={close_v:.2f}  "
-                        f"RSI={rsi_v:.1f}  "
+                        f"RSI={rsi_prev_v:.1f}→{rsi_v:.1f}  "
                         f"EMA={ema_v:.2f}  "
-                        f"HTF={'↑bull' if htf_bullish else '↓bear'}  "
+                        f"HTF={'↑bull' if htf_bullish else '↓bear'}({htf_ema_f:.0f}/{htf_ema_s:.0f})  "
                         f"ATR={atr_v:.2f}"
                     )
 

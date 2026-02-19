@@ -34,11 +34,13 @@ class MeanReversionSignalEngine:
         df["bb_upper"] = df["bb_mid"] + self.params.bb_std * rolling_std
         df["bb_lower"] = df["bb_mid"] - self.params.bb_std * rolling_std
 
-        # RSI
+        # RSI (Wilder 표준: EMA smoothing, alpha=1/period)
         delta = df["close"].diff()
-        gain = delta.clip(lower=0).rolling(self.params.rsi_period).mean()
-        loss = (-delta.clip(upper=0)).rolling(self.params.rsi_period).mean()
-        rs = gain / loss.replace(0, np.nan)
+        gain = delta.clip(lower=0)
+        loss = (-delta.clip(upper=0))
+        avg_gain = gain.ewm(alpha=1 / self.params.rsi_period, min_periods=self.params.rsi_period, adjust=False).mean()
+        avg_loss = loss.ewm(alpha=1 / self.params.rsi_period, min_periods=self.params.rsi_period, adjust=False).mean()
+        rs = avg_gain / avg_loss.replace(0, np.nan)
         df["rsi"] = 100 - (100 / (1 + rs))
 
         # ATR

@@ -29,10 +29,13 @@ class DualTimeframeSignalEngine:
         return series.ewm(span=period, adjust=False).mean()
 
     def _compute_rsi(self, series: pd.Series, period: int) -> pd.Series:
+        """Wilder 표준 RSI (EMA smoothing, alpha=1/period)"""
         delta = series.diff()
-        gain = delta.clip(lower=0).rolling(period).mean()
-        loss = (-delta.clip(upper=0)).rolling(period).mean()
-        rs = gain / loss.replace(0, np.nan)
+        gain = delta.clip(lower=0)
+        loss = (-delta.clip(upper=0))
+        avg_gain = gain.ewm(alpha=1 / period, min_periods=period, adjust=False).mean()
+        avg_loss = loss.ewm(alpha=1 / period, min_periods=period, adjust=False).mean()
+        rs = avg_gain / avg_loss.replace(0, np.nan)
         return 100 - (100 / (1 + rs))
 
     def _compute_atr(self, df: pd.DataFrame, period: int) -> pd.Series:
@@ -44,13 +47,18 @@ class DualTimeframeSignalEngine:
         ], axis=1).max(axis=1)
         return tr.rolling(period).mean()
 
-    def htf_is_bullish(self, candles: pd.DataFrame) -> bool:
-        """상위 타임프레임에서 상승 추세 여부 판단"""
+    def htf_is_bullish(self, candles: pd.DataFrame) -> tuple:
+        """상위 타임프레임에서 상승 추세 여부 판단 + 진단 정보 반환"""
+        info = {"htf_len": len(candles), "htf_close": 0.0, "htf_ema_fast": 0.0, "htf_ema_slow": 0.0}
         if len(candles) < self.params.htf_ema_slow + 5:
-            return False
+            return False, info  # 데이터 부족
         ema_fast = self._compute_ema(candles["close"], self.params.htf_ema_fast)
         ema_slow = self._compute_ema(candles["close"], self.params.htf_ema_slow)
-        return float(ema_fast.iloc[-1]) > float(ema_slow.iloc[-1])
+        info["htf_close"] = float(candles["close"].iloc[-1])
+        info["htf_ema_fast"] = float(ema_fast.iloc[-1])
+        info["htf_ema_slow"] = float(ema_slow.iloc[-1])
+        bullish = float(ema_fast.iloc[-1]) > float(ema_slow.iloc[-1])
+        return bullish, info
 
     def build_ltf_frame(self, candles: pd.DataFrame) -> pd.DataFrame:
         df = candles.copy()
@@ -63,16 +71,19 @@ class DualTimeframeSignalEngine:
         self,
         ltf_frame: pd.DataFrame,
         htf_bullish: bool,
+        htf_data_sufficient: bool,
         in_position: bool,
         trailing_stop: Optional[float],
         bars_since_trade: int,
     ) -> SignalDecision:
-        if ltf_frame.empty:
+        if ltf_frame.empty or len(ltf_frame) < 2:
             return SignalDecision("hold", "insufficient_data", trailing_stop, 0.0)
 
         last = ltf_frame.iloc[-1]
+        prev = ltf_frame.iloc[-2]
         close_price = float(last["close"])
         rsi = float(last["rsi"])
+        rsi_prev = float(prev["rsi"])
         ema = float(last["ema"])
         atr = float(last["atr"])
 
@@ -88,13 +99,18 @@ class DualTimeframeSignalEngine:
         if bars_since_trade < self.params.cooldown_bars:
             return SignalDecision("hold", "cooldown", trailing_stop, close_price)
 
-        # 진입: 상위 추세 상승 + 하위 RSI 과매도권 회복 + 가격이 LTF EMA 위
-        if htf_bullish and rsi <= self.params.ltf_rsi_oversold and close_price > ema:
-            entry_stop = close_price - atr * self.params.initial_stop_atr_mult
-            return SignalDecision("buy", "htf_bull_ltf_pullback_entry", entry_stop, close_price)
+        # HTF 데이터 부족 vs 실제 bearish 구분
+        if not htf_bullish:
+            reason = "htf_insufficient_data" if not htf_data_sufficient else "no_htf_bull"
+            return SignalDecision("hold", reason, trailing_stop, close_price)
 
-        reason = "no_htf_bull" if not htf_bullish else "ltf_no_entry"
-        return SignalDecision("hold", reason, trailing_stop, close_price)
+        # 진입: 상위 추세 상승 + RSI 과매도권 회복(cross) + 가격이 LTF EMA 위
+        oversold = self.params.ltf_rsi_oversold
+        if rsi_prev <= oversold and rsi > oversold and close_price > ema:
+            entry_stop = close_price - atr * self.params.initial_stop_atr_mult
+            return SignalDecision("buy", "htf_bull_rsi_recovery", entry_stop, close_price)
+
+        return SignalDecision("hold", "ltf_no_entry", trailing_stop, close_price)
 
 
 class DualTimeframeStrategy:
@@ -138,11 +154,13 @@ class DualTimeframeStrategy:
 
     async def execute_strategy(self):
         # 상위/하위 타임프레임 데이터 동시 수신
+        # HTF: EMA 안정성을 위해 최소 htf_ema_slow * 3 캔들 요청
+        htf_limit = max(self.params.htf_ema_slow * 3, self.params.htf_ema_slow + 20)
         htf_raw, ltf_raw = await asyncio.gather(
             self.client.get_kline_data(
                 symbol=self.params.symbol,
                 interval=self.params.htf_interval,
-                limit=self.params.htf_ema_slow + 20,
+                limit=htf_limit,
             ),
             self.client.get_kline_data(
                 symbol=self.params.symbol,
@@ -156,25 +174,35 @@ class DualTimeframeStrategy:
         if ltf_candles.empty:
             return
 
-        htf_bullish = self.signal_engine.htf_is_bullish(htf_candles)
+        htf_bullish, htf_info = self.signal_engine.htf_is_bullish(htf_candles)
+        htf_data_sufficient = len(htf_candles) >= self.params.htf_ema_slow + 5
         self._htf_bullish = htf_bullish
         ltf_frame = self.signal_engine.build_ltf_frame(ltf_candles)
 
         decision = self.signal_engine.decide(
             ltf_frame=ltf_frame,
             htf_bullish=htf_bullish,
+            htf_data_sufficient=htf_data_sufficient,
             in_position=(self.position == "long"),
             trailing_stop=self.trailing_stop,
             bars_since_trade=self.bars_since_trade,
         )
         last_row = ltf_frame.iloc[-1]
+        prev_row = ltf_frame.iloc[-2] if len(ltf_frame) >= 2 else last_row
         self.last_reason = decision.reason
         self.last_indicators = {
+            # LTF 지표
             "close": float(last_row["close"]),
             "rsi": float(last_row["rsi"]),
+            "rsi_prev": float(prev_row["rsi"]),
             "ema": float(last_row["ema"]),
             "atr": float(last_row["atr"]),
+            # HTF 진단 지표
             "htf_bullish": float(htf_bullish),
+            "htf_len": float(htf_info["htf_len"]),
+            "htf_close": htf_info["htf_close"],
+            "htf_ema_fast": htf_info["htf_ema_fast"],
+            "htf_ema_slow": htf_info["htf_ema_slow"],
         }
         self.last_signal = decision.signal
         self.trailing_stop = decision.trailing_stop
@@ -222,6 +250,7 @@ class DualTimeframeStrategy:
         if self.position != "long":
             self.bars_since_trade += 1
             return
+        # qty=None → BybitClient.calculate_safe_order_size()가 보유량 전량 조회 후 매도
         result = await self.client.place_order(symbol=self.params.symbol, side="Sell", qty=None)
         if not result.get("success"):
             self.bars_since_trade += 1
