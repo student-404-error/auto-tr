@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS signal_log (
     reason TEXT,
     close REAL,
     indicators_json TEXT,
+    params_json TEXT,
     trailing_stop REAL,
     in_position INTEGER DEFAULT 0
 );
@@ -102,6 +103,11 @@ class TradeTrackerDB:
                 return
             async with aiosqlite.connect(self.db_path) as db:
                 await db.executescript(SCHEMA)
+                # 기존 DB 마이그레이션: params_json 컬럼이 없으면 추가
+                try:
+                    await db.execute("SELECT params_json FROM signal_log LIMIT 1")
+                except Exception:
+                    await db.execute("ALTER TABLE signal_log ADD COLUMN params_json TEXT")
                 await db.commit()
             self._initialized = True
 
@@ -120,18 +126,20 @@ class TradeTrackerDB:
         indicators: Optional[Dict[str, float]] = None,
         trailing_stop: Optional[float] = None,
         in_position: bool = False,
+        params: Optional[Dict[str, Any]] = None,
     ) -> None:
-        """매 전략 루프마다 신호 및 지표값 기록 (퀀트 분석용)"""
+        """매 전략 루프마다 신호 및 지표값 + 파라미터 기록 (퀀트 분석용)"""
         await self._init()
         close = float(indicators.get("close", 0.0)) if indicators else 0.0
         indicators_json = json.dumps(indicators or {}, ensure_ascii=True)
+        params_json = json.dumps(params or {}, ensure_ascii=True)
         async with aiosqlite.connect(self.db_path) as db:
             await db.execute(
                 """
-                INSERT INTO signal_log(symbol, strategy, signal, reason, close, indicators_json, trailing_stop, in_position)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO signal_log(symbol, strategy, signal, reason, close, indicators_json, params_json, trailing_stop, in_position)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (symbol, strategy, signal, reason, close, indicators_json, trailing_stop, int(in_position)),
+                (symbol, strategy, signal, reason, close, indicators_json, params_json, trailing_stop, int(in_position)),
             )
             await db.commit()
 
@@ -171,6 +179,10 @@ class TradeTrackerDB:
                 d["indicators"] = json.loads(d.get("indicators_json") or "{}")
             except Exception:
                 d["indicators"] = {}
+            try:
+                d["params"] = json.loads(d.get("params_json") or "{}")
+            except Exception:
+                d["params"] = {}
             result.append(d)
         return result
 

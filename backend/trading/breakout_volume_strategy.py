@@ -159,6 +159,7 @@ class BreakoutVolumeStrategy:
             indicators=self.last_indicators,
             trailing_stop=self.trailing_stop,
             in_position=(self.position == "long"),
+            params=self.params.to_dict(),
         )
 
         if decision.signal == "buy":
