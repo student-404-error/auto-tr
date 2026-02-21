@@ -80,6 +80,7 @@ celerybeat.pid
 
 # Environments
 .venv
+.venv_run
 env/
 venv/
 ENV/
