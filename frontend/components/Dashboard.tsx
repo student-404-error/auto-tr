@@ -11,6 +11,7 @@ import EquityCurve from './EquityCurve'
 import RecentExecutions from './RecentExecutions'
 import LiveSignalLog from './LiveSignalLog'
 import MarketSentiment from './MarketSentiment'
+import BalanceBreakdown from './BalanceBreakdown'
 
 interface TradingStatus {
   is_active: boolean
@@ -155,6 +156,7 @@ export default function Dashboard() {
 
             <div className="space-y-6 lg:sticky lg:top-[80px]">
               <LiveSignalLog />
+              <BalanceBreakdown balances={portfolio?.balances || {}} />
               <MarketSentiment />
             </div>
           </div>
