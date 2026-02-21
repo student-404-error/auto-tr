@@ -4,11 +4,11 @@ import logging
 from datetime import datetime
 from fastapi import APIRouter, HTTPException, Request, Depends
 from pydantic import BaseModel, Field
-from typing import Optional, Literal, List
+from typing import Optional, Literal, Dict, Any
 from api.limiter import limiter
 from models.trade_tracker_db import TradeTrackerDB
 from services.position_service import PositionService
-from trading.strategy_params import RegimeTrendParams
+from trading.strategy_params import BUILTIN_PRESETS, apply_preset_overrides
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -57,6 +57,14 @@ class StrategyChangeRequest(BaseModel):
     strategy: str
 
 
+class StrategyPresetSaveRequest(BaseModel):
+    params: dict
+
+
+class SymbolChangeRequest(BaseModel):
+    symbol: str
+
+
 @router.get("/auth/validate")
 @limiter.limit("10/minute")
 async def validate_auth(request: Request, _auth=Depends(require_api_key)):
@@ -76,6 +84,66 @@ def get_trading_strategy(request: Request):
     if not trading_strategy:
         raise HTTPException(status_code=500, detail="Trading strategy not initialized")
     return trading_strategy
+
+
+def _parse_bool(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        lowered = value.strip().lower()
+        if lowered in {"true", "1", "yes", "y", "on"}:
+            return True
+        if lowered in {"false", "0", "no", "n", "off"}:
+            return False
+    return bool(value)
+
+
+def _normalize_param_values(current_params: Dict[str, Any], updates: Dict[str, Any]) -> Dict[str, Any]:
+    normalized: Dict[str, Any] = {}
+    for key, value in updates.items():
+        current_value = current_params.get(key)
+        target_type = type(current_value)
+        try:
+            if target_type is bool:
+                normalized[key] = _parse_bool(value)
+            elif target_type is int:
+                normalized[key] = int(value)
+            elif target_type is float:
+                normalized[key] = float(value)
+            elif target_type is str:
+                normalized[key] = str(value)
+            else:
+                normalized[key] = value
+        except (ValueError, TypeError):
+            raise HTTPException(status_code=422, detail=f"Invalid value for '{key}': {value}")
+    return normalized
+
+
+def _validate_strategy_name(strategy: Any) -> str:
+    strategy_name = str(strategy or "").strip().lower()
+    if strategy_name not in AVAILABLE_STRATEGIES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Unknown strategy '{strategy_name}'. Available: {AVAILABLE_STRATEGIES}",
+        )
+    return strategy_name
+
+
+def _validate_symbol(symbol: Any) -> str:
+    normalized_symbol = str(symbol or "").strip().upper()
+    if normalized_symbol not in SUPPORTED_ASSETS:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Unsupported symbol '{normalized_symbol}'. Supported: {SUPPORTED_ASSETS}",
+        )
+    return normalized_symbol
+
+
+async def _load_preset_overrides(strategy_name: str, symbol: str) -> Dict[str, Any]:
+    db_preset = await trade_tracker_db.get_strategy_preset(strategy_name, symbol)
+    if isinstance(db_preset, dict):
+        return db_preset
+    return dict(BUILTIN_PRESETS.get((strategy_name, symbol), {}))
 
 
 @router.get("/portfolio")
@@ -241,32 +309,25 @@ async def update_trading_params(
     if unknown_keys:
         raise HTTPException(status_code=422, detail=f"Unknown params: {', '.join(unknown_keys)}")
 
-    normalized = {}
-    for key, value in updates.items():
-        current_value = current_params.get(key)
-        target_type = type(current_value)
-        if target_type is bool:
-            normalized[key] = bool(value)
-        elif target_type is int:
-            normalized[key] = int(value)
-        elif target_type is float:
-            normalized[key] = float(value)
-        else:
-            normalized[key] = str(value)
+    normalized = _normalize_param_values(current_params, updates)
 
-    if hasattr(strategy, "params") and isinstance(getattr(strategy, "params"), RegimeTrendParams):
-        params_obj = strategy.params
-        for key, value in normalized.items():
-            setattr(params_obj, key, value)
-        # Keep engine pointing to latest params object.
-        if hasattr(strategy, "signal_engine"):
-            strategy.signal_engine.params = params_obj
-    else:
-        for key, value in normalized.items():
-            if hasattr(strategy, key):
-                setattr(strategy, key, value)
+    if not hasattr(strategy, "params"):
+        raise HTTPException(status_code=400, detail="Current strategy has no editable params object")
 
-    return {"success": True, "parameters": strategy.get_strategy_status().get("parameters", {})}
+    params_obj = getattr(strategy, "params")
+    apply_preset_overrides(params_obj, normalized)
+
+    if hasattr(strategy, "signal_engine"):
+        strategy.signal_engine.params = params_obj
+
+    new_status = strategy.get_strategy_status()
+    new_params = new_status.get("parameters", {}) or {}
+    strategy_name = new_status.get("strategy", "")
+    symbol = str(new_params.get("symbol", "")).upper()
+    if strategy_name and symbol:
+        await trade_tracker_db.save_strategy_preset(strategy_name, symbol, new_params)
+
+    return {"success": True, "parameters": new_params}
 
 
 @router.post("/order")
@@ -806,6 +867,62 @@ async def list_strategies(request: Request):
     return {"current": current, "available": strategies}
 
 
+@router.get("/trading/presets")
+async def list_trading_presets(
+    strategy: Optional[str] = None,
+    _auth=Depends(require_api_key),
+):
+    """프리셋 목록 조회 (전략 필터 optional)."""
+    strategy_name = _validate_strategy_name(strategy) if strategy else None
+    presets = await trade_tracker_db.list_strategy_presets(strategy_name)
+    return {"presets": presets, "count": len(presets)}
+
+
+@router.get("/trading/presets/{strategy}/{symbol}")
+async def get_trading_preset(
+    strategy: str,
+    symbol: str,
+    _auth=Depends(require_api_key),
+):
+    """특정 strategy+symbol 프리셋 조회."""
+    strategy_name = _validate_strategy_name(strategy)
+    normalized_symbol = _validate_symbol(symbol)
+
+    preset = await trade_tracker_db.get_strategy_preset(strategy_name, normalized_symbol)
+    source = "db"
+    if not isinstance(preset, dict):
+        preset = BUILTIN_PRESETS.get((strategy_name, normalized_symbol))
+        source = "builtin" if preset else "default"
+
+    return {
+        "strategy": strategy_name,
+        "symbol": normalized_symbol,
+        "params": preset or {},
+        "source": source,
+    }
+
+
+@router.post("/trading/presets/{strategy}/{symbol}")
+@limiter.limit("10/minute")
+async def save_trading_preset(
+    request: Request,
+    strategy: str,
+    symbol: str,
+    payload: StrategyPresetSaveRequest,
+    _auth=Depends(require_api_key),
+):
+    """strategy+symbol 프리셋 저장(upsert)."""
+    strategy_name = _validate_strategy_name(strategy)
+    normalized_symbol = _validate_symbol(symbol)
+    params = payload.params or {}
+    if not isinstance(params, dict):
+        raise HTTPException(status_code=422, detail="params must be an object")
+
+    params["symbol"] = normalized_symbol
+    await trade_tracker_db.save_strategy_preset(strategy_name, normalized_symbol, params)
+    return {"success": True, "strategy": strategy_name, "symbol": normalized_symbol, "params": params}
+
+
 @router.post("/trading/strategy")
 @limiter.limit("5/minute")
 async def change_strategy(
@@ -822,25 +939,73 @@ async def change_strategy(
             detail="Stop trading before changing strategy.",
         )
 
-    strategy_name = body.strategy.strip().lower()
-    if strategy_name not in AVAILABLE_STRATEGIES:
-        raise HTTPException(
-            status_code=422,
-            detail=f"Unknown strategy '{strategy_name}'. Available: {AVAILABLE_STRATEGIES}",
-        )
+    strategy_name = _validate_strategy_name(body.strategy)
 
     build_strategy = getattr(request.app.state, "build_strategy", None)
     if not build_strategy:
         raise HTTPException(status_code=500, detail="Strategy factory not available.")
 
+    current_symbol = "BTCUSDT"
+    if trading_strategy:
+        current_status = trading_strategy.get_strategy_status()
+        current_params = current_status.get("parameters", {}) or {}
+        current_symbol = _validate_symbol(str(current_params.get("symbol", "BTCUSDT")))
+
+    preset_overrides = await _load_preset_overrides(strategy_name, current_symbol)
+    preset_overrides["symbol"] = current_symbol
+
     trading_client = get_trading_client(request)
-    new_strategy = build_strategy(strategy_name, trading_client)
+    new_strategy = build_strategy(
+        strategy_name,
+        trading_client,
+        preset_overrides=preset_overrides,
+    )
     request.app.state.trading_strategy = new_strategy
 
-    logger.info("Strategy changed to: %s", strategy_name)
+    logger.info("Strategy changed to: %s (%s)", strategy_name, current_symbol)
     return {
         "success": True,
         "strategy": strategy_name,
+        "status": new_strategy.get_strategy_status(),
+    }
+
+
+@router.post("/trading/symbol")
+@limiter.limit("10/minute")
+async def change_symbol(
+    request: Request,
+    body: SymbolChangeRequest,
+    _auth=Depends(require_api_key),
+):
+    """코인 변경 (트레이딩 중지 상태에서만 허용)."""
+    trading_strategy = getattr(request.app.state, "trading_strategy", None)
+    if trading_strategy and trading_strategy.is_active:
+        raise HTTPException(status_code=400, detail="Stop trading first.")
+
+    strategy_status = trading_strategy.get_strategy_status() if trading_strategy else {}
+    strategy_name = _validate_strategy_name(strategy_status.get("strategy", "regime_trend"))
+    next_symbol = _validate_symbol(body.symbol)
+
+    build_strategy = getattr(request.app.state, "build_strategy", None)
+    if not build_strategy:
+        raise HTTPException(status_code=500, detail="Strategy factory not available.")
+
+    preset_overrides = await _load_preset_overrides(strategy_name, next_symbol)
+    preset_overrides["symbol"] = next_symbol
+
+    trading_client = get_trading_client(request)
+    new_strategy = build_strategy(
+        strategy_name,
+        trading_client,
+        preset_overrides=preset_overrides,
+    )
+    request.app.state.trading_strategy = new_strategy
+
+    logger.info("Symbol changed to: %s (strategy=%s)", next_symbol, strategy_name)
+    return {
+        "success": True,
+        "strategy": strategy_name,
+        "symbol": next_symbol,
         "status": new_strategy.get_strategy_status(),
     }
 
