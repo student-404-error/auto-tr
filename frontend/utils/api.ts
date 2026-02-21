@@ -228,6 +228,12 @@ export const tradingApi = {
     return response.data
   },
 
+  // 거래 심볼 변경
+  changeSymbol: async (symbol: string) => {
+    const response = await api.post('/api/trading/symbol', { symbol })
+    return response.data
+  },
+
   // DB 요약 조회
   getDbSummary: async () => {
     const response = await api.get('/api/db/summary')

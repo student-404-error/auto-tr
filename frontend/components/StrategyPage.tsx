@@ -155,6 +155,8 @@ const STRATEGY_META: Record<string, StrategyMeta> = {
   },
 }
 
+const SUPPORTED_SYMBOLS = ['BTCUSDT', 'XRPUSDT', 'SOLUSDT']
+
 function formatTime(timestamp: string): string {
   try {
     const d = new Date(timestamp)
@@ -197,6 +199,7 @@ export default function StrategyPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isSavingParams, setIsSavingParams] = useState(false)
   const [isChangingStrategy, setIsChangingStrategy] = useState(false)
+  const [isChangingSymbol, setIsChangingSymbol] = useState(false)
   const [paramsDraft, setParamsDraft] = useState<Record<string, string | number | boolean>>({})
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [successMsg, setSuccessMsg] = useState<string | null>(null)
@@ -286,6 +289,7 @@ export default function StrategyPage() {
   const description = currentMeta.description
   const params = status?.parameters || {}
   const paramDescs = status?.parameter_descriptions || {}
+  const currentSymbol = String(params.symbol || 'BTCUSDT').toUpperCase()
 
   const totalReturn = performance?.monthly_change_percent || 0
   const totalReturnPositive = totalReturn >= 0
@@ -336,6 +340,23 @@ export default function StrategyPage() {
       setErrorMsg(getErrorMessage(e) || 'Failed to change strategy')
     } finally {
       setIsChangingStrategy(false)
+    }
+  }
+
+  const handleChangeSymbol = async (nextSymbol: string) => {
+    if (!nextSymbol || nextSymbol === currentSymbol || isChangingSymbol) return
+    setErrorMsg(null)
+    setSuccessMsg(null)
+    setIsChangingSymbol(true)
+    try {
+      await tradingApi.changeSymbol(nextSymbol)
+      await fetchAll()
+      setSuccessMsg(`Symbol changed to ${nextSymbol}`)
+      setTimeout(() => setSuccessMsg(null), 3000)
+    } catch (e: unknown) {
+      setErrorMsg(getErrorMessage(e) || 'Failed to change symbol')
+    } finally {
+      setIsChangingSymbol(false)
     }
   }
 
@@ -463,6 +484,35 @@ export default function StrategyPage() {
         {/* Strategy Selector */}
         <div className="space-y-3">
           <div className="flex items-center justify-between px-1">
+            <h3 className="text-sm font-semibold text-slate-300">Trading Symbol</h3>
+            {isActive && <span className="text-xs text-slate-500">Stop trading first</span>}
+          </div>
+          <div className="glass-panel rounded-xl p-4 border border-white/10 flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg bg-background-dark flex items-center justify-center text-slate-400">
+              <span className="material-icons-round text-lg">currency_bitcoin</span>
+            </div>
+            <div className="flex-1">
+              <p className="text-xs text-slate-500 mb-1">Current market</p>
+              <select
+                value={currentSymbol}
+                onChange={(e) => handleChangeSymbol(e.target.value)}
+                disabled={isChangingSymbol}
+                className="w-full bg-surface-highlight border border-white/10 rounded-lg px-3 py-2 text-sm font-semibold text-white focus:outline-none focus:border-primary disabled:opacity-60"
+              >
+                {SUPPORTED_SYMBOLS.map((symbol) => (
+                  <option key={symbol} value={symbol}>
+                    {symbol}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {isChangingSymbol && <div className="w-5 h-5 border border-primary border-t-transparent rounded-full animate-spin" />}
+          </div>
+        </div>
+
+        {/* Strategy Selector */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between px-1">
             <h3 className="text-sm font-semibold text-slate-300">Active Strategy</h3>
             {!isActive && (
               <button
@@ -569,9 +619,12 @@ export default function StrategyPage() {
         <div className="space-y-3">
           <div className="flex justify-between items-end px-1">
             <h3 className="text-sm font-semibold text-slate-300">Parameters</h3>
+            <span className="text-[11px] font-bold px-2 py-1 rounded-full bg-primary/15 border border-primary/25 text-primary uppercase tracking-wide">
+              {currentSymbol} preset
+            </span>
           </div>
           <div className="bg-surface rounded-xl overflow-hidden border border-white/5 divide-y divide-white/5">
-            {Object.entries(params).map(([key, value]) => {
+            {Object.entries(params).filter(([key]) => key !== 'symbol').map(([key, value]) => {
               const icon = PARAM_ICONS[key] || 'settings'
               const label = PARAM_LABELS[key] || key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
               const desc = paramDescs[key] || ''
@@ -605,7 +658,7 @@ export default function StrategyPage() {
               disabled={isSavingParams}
               className="mt-3 bg-primary hover:bg-primary/90 disabled:opacity-50 text-white text-sm font-semibold px-4 py-2 rounded-lg"
             >
-              {isSavingParams ? 'Saving...' : 'Save Parameters'}
+              {isSavingParams ? 'Saving...' : `Save as ${currentSymbol} Preset`}
             </button>
           </div>
         </div>
