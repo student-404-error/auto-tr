@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import os
 from datetime import datetime
+from typing import Optional, Dict, Any
 from dotenv import load_dotenv
 import logging
 from slowapi.errors import RateLimitExceeded
@@ -26,6 +27,8 @@ from trading.strategy_params import (
     BreakoutVolumeParams,
     MeanReversionParams,
     DualTimeframeParams,
+    BUILTIN_PRESETS,
+    apply_preset_overrides,
 )
 
 app = FastAPI(title="Bitcoin Auto-Trading API", version="1.0.0")
@@ -60,27 +63,39 @@ app.add_middleware(
 )
 
 
-def build_strategy(strategy_name: str, client: BybitClient):
+def build_strategy(
+    strategy_name: str,
+    client: BybitClient,
+    preset_overrides: Optional[Dict[str, Any]] = None,
+):
     """전략 이름으로 전략 인스턴스 생성"""
-    symbol = os.getenv("STRATEGY_SYMBOL", "BTCUSDT")
+    symbol = os.getenv("STRATEGY_SYMBOL", "BTCUSDT").upper()
     loop_seconds = int(os.getenv("STRATEGY_LOOP_SECONDS", "60"))
+    overrides = dict(preset_overrides or {})
+    overrides.setdefault("symbol", symbol)
 
     if strategy_name == "breakout_volume":
+        params = BreakoutVolumeParams(symbol=symbol, loop_seconds=loop_seconds)
+        apply_preset_overrides(params, overrides)
         return BreakoutVolumeStrategy(
             client, trade_tracker_db,
-            params=BreakoutVolumeParams(symbol=symbol, loop_seconds=loop_seconds),
+            params=params,
         )
 
     if strategy_name == "mean_reversion":
+        params = MeanReversionParams(symbol=symbol, loop_seconds=loop_seconds)
+        apply_preset_overrides(params, overrides)
         return MeanReversionStrategy(
             client, trade_tracker_db,
-            params=MeanReversionParams(symbol=symbol, loop_seconds=loop_seconds),
+            params=params,
         )
 
     if strategy_name == "dual_timeframe":
+        params = DualTimeframeParams(symbol=symbol, loop_seconds=loop_seconds)
+        apply_preset_overrides(params, overrides)
         return DualTimeframeStrategy(
             client, trade_tracker_db,
-            params=DualTimeframeParams(symbol=symbol, loop_seconds=loop_seconds),
+            params=params,
         )
 
     # 기본: regime_trend
@@ -97,7 +112,25 @@ def build_strategy(strategy_name: str, client: BybitClient):
         loop_seconds=loop_seconds,
         cooldown_bars=int(os.getenv("STRATEGY_COOLDOWN_BARS", "2")),
     )
+    apply_preset_overrides(params, overrides)
     return RegimeTrendStrategy(client, trade_tracker_db, params=params)
+
+
+async def _seed_builtin_presets() -> None:
+    """DB에 없는 빌트인 프리셋만 최초 시드."""
+    for (strategy_name, symbol), preset in BUILTIN_PRESETS.items():
+        existing = await trade_tracker_db.get_strategy_preset(strategy_name, symbol)
+        if existing is None:
+            await trade_tracker_db.save_strategy_preset(strategy_name, symbol, preset)
+            logger.info("Seeded built-in preset: %s/%s", strategy_name, symbol)
+
+
+async def _load_preset_overrides(strategy_name: str, symbol: str) -> dict:
+    """DB 우선, 없으면 빌트인 프리셋을 반환."""
+    db_preset = await trade_tracker_db.get_strategy_preset(strategy_name, symbol)
+    if isinstance(db_preset, dict):
+        return db_preset
+    return dict(BUILTIN_PRESETS.get((strategy_name, symbol), {}))
 
 
 @app.on_event("startup")
@@ -107,7 +140,17 @@ async def startup_event():
     app.state.trade_tracker = trade_tracker_db
 
     strategy_name = os.getenv("TRADING_STRATEGY", "regime_trend").lower()
-    app.state.trading_strategy = build_strategy(strategy_name, app.state.trading_client)
+    symbol = os.getenv("STRATEGY_SYMBOL", "BTCUSDT").upper()
+
+    await _seed_builtin_presets()
+    preset_overrides = await _load_preset_overrides(strategy_name, symbol)
+    preset_overrides.setdefault("symbol", symbol)
+
+    app.state.trading_strategy = build_strategy(
+        strategy_name,
+        app.state.trading_client,
+        preset_overrides=preset_overrides,
+    )
     app.state.strategy_task = None
     # 전략 전환 함수를 app.state에 노출
     app.state.build_strategy = build_strategy

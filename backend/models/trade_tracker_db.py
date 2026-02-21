@@ -78,6 +78,17 @@ CREATE TABLE IF NOT EXISTS portfolio_snapshots (
 );
 
 CREATE INDEX IF NOT EXISTS idx_portfolio_snapshots_ts ON portfolio_snapshots(ts DESC);
+
+CREATE TABLE IF NOT EXISTS strategy_presets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    strategy TEXT NOT NULL,
+    symbol TEXT NOT NULL,
+    params_json TEXT NOT NULL,
+    updated_at TEXT DEFAULT (datetime('now')),
+    UNIQUE(strategy, symbol)
+);
+
+CREATE INDEX IF NOT EXISTS idx_strategy_presets_key ON strategy_presets(strategy, symbol);
 """
 
 
@@ -236,6 +247,69 @@ class TradeTrackerDB:
             )
             await db.commit()
             return cursor.rowcount
+
+    # ── Strategy Presets (코인별/전략별 파라미터 저장) ──────────────
+
+    async def get_strategy_preset(self, strategy: str, symbol: str) -> Optional[Dict[str, Any]]:
+        """strategy+symbol 조합의 프리셋 조회. 없으면 None."""
+        await self._init()
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute(
+                "SELECT params_json FROM strategy_presets WHERE strategy = ? AND symbol = ?",
+                (strategy, symbol),
+            )
+            row = await cursor.fetchone()
+        if not row:
+            return None
+        try:
+            return json.loads(row["params_json"])
+        except (json.JSONDecodeError, TypeError):
+            return None
+
+    async def save_strategy_preset(self, strategy: str, symbol: str, params: Dict[str, Any]) -> None:
+        """strategy+symbol 프리셋 upsert."""
+        await self._init()
+        params_json = json.dumps(params, ensure_ascii=True)
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute(
+                """
+                INSERT INTO strategy_presets(strategy, symbol, params_json, updated_at)
+                VALUES (?, ?, ?, datetime('now'))
+                ON CONFLICT(strategy, symbol) DO UPDATE SET
+                    params_json = excluded.params_json,
+                    updated_at = excluded.updated_at
+                """,
+                (strategy, symbol, params_json),
+            )
+            await db.commit()
+
+    async def list_strategy_presets(self, strategy: Optional[str] = None) -> List[Dict[str, Any]]:
+        """프리셋 목록 조회. strategy 지정 시 해당 전략만."""
+        await self._init()
+        if strategy:
+            sql = "SELECT strategy, symbol, params_json, updated_at FROM strategy_presets WHERE strategy = ? ORDER BY symbol"
+            params: tuple = (strategy,)
+        else:
+            sql = "SELECT strategy, symbol, params_json, updated_at FROM strategy_presets ORDER BY strategy, symbol"
+            params = ()
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute(sql, params)
+            rows = await cursor.fetchall()
+        result = []
+        for row in rows:
+            try:
+                p = json.loads(row["params_json"])
+            except Exception:
+                p = {}
+            result.append({
+                "strategy": row["strategy"],
+                "symbol": row["symbol"],
+                "params": p,
+                "updated_at": row["updated_at"],
+            })
+        return result
 
     async def add_trade(
         self,

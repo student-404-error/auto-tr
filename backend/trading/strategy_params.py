@@ -1,5 +1,5 @@
-from dataclasses import dataclass, asdict
-from typing import Dict, Any
+from dataclasses import dataclass, asdict, fields
+from typing import Dict, Any, Tuple
 
 
 @dataclass
@@ -167,3 +167,44 @@ def dual_timeframe_param_descriptions() -> Dict[str, str]:
         "loop_seconds": "Polling interval in seconds.",
         "cooldown_bars": "Bars to wait after a trade before next entry.",
     }
+
+
+# ---------------------------------------------------------------------------
+# 코인별/전략별 빌트인 프리셋 (dataclass 기본값 위에 오버라이드)
+# Key: (strategy_name, symbol) → 변경할 필드만 포함
+# ---------------------------------------------------------------------------
+BUILTIN_PRESETS: Dict[Tuple[str, str], Dict[str, Any]] = {
+    # XRP: 짧은 사이클, 높은 변동성 → EMA 빠르게, RSI 낮게
+    ("dual_timeframe", "XRPUSDT"): {
+        "htf_ema_fast": 10,
+        "htf_ema_slow": 30,
+        "ltf_rsi_oversold": 35.0,
+        "htf_interval": "30",
+    },
+    # SOL: 중간 변동성 → BTC보다 빠르게, XRP보다 느리게
+    ("dual_timeframe", "SOLUSDT"): {
+        "htf_ema_fast": 12,
+        "htf_ema_slow": 35,
+        "ltf_rsi_oversold": 38.0,
+    },
+}
+
+# 전략 이름 → 파라미터 클래스 매핑
+STRATEGY_PARAMS_MAP: Dict[str, type] = {
+    "regime_trend": RegimeTrendParams,
+    "breakout_volume": BreakoutVolumeParams,
+    "mean_reversion": MeanReversionParams,
+    "dual_timeframe": DualTimeframeParams,
+}
+
+
+def apply_preset_overrides(params_obj: Any, overrides: Dict[str, Any]) -> None:
+    """프리셋 오버라이드를 dataclass 인스턴스에 적용. 타입 자동 변환."""
+    for key, value in overrides.items():
+        if not hasattr(params_obj, key):
+            continue
+        current = getattr(params_obj, key)
+        try:
+            setattr(params_obj, key, type(current)(value))
+        except (ValueError, TypeError):
+            setattr(params_obj, key, value)
